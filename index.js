@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 
 const token = process.env.BOT_TOKEN;
+// Webhook ব্যবহার করলে polling: false রাখতে হয়
 const bot = new TelegramBot(token);
 
 const app = express();
@@ -86,10 +87,13 @@ const mainKeyboard = {
 
 // Webhook Handling
 app.post(`/api/webhook`, async (req, res) => {
+    // টেলিগ্রামকে দ্রুত ২০০ ওকে পাঠানো জরুরি
+    res.sendStatus(200);
+
     try {
         const update = req.body;
         const msg = update.message;
-        if (!msg) return res.sendStatus(200);
+        if (!msg) return;
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
@@ -106,7 +110,7 @@ app.post(`/api/webhook`, async (req, res) => {
             return await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. /id Command Logic (Reply or Argument)
+        // 2. /id Command Logic
         if (text.startsWith('/id')) {
             const args = text.split(' ');
             if (msg.reply_to_message) {
@@ -136,7 +140,7 @@ app.post(`/api/webhook`, async (req, res) => {
                                          `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 4. User Shared (from Button)
+        // 4. User Shared (via button)
         if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
             try {
@@ -145,14 +149,14 @@ app.post(`/api/webhook`, async (req, res) => {
                              `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 return await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                return await bot.sendMessage(chatId, `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                return await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
-        // 5. Detection: Forward, Media, Custom Emojis
+        // 5. Multi-Detection (Forward, Media, Emoji, Auto-lookup)
         let finalMessage = "";
 
-        // --- A: Forward Detection ---
+        // A: Forward Source
         if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
             let fId = 'N/A', fName = 'Protected Source';
             if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
@@ -166,7 +170,7 @@ app.post(`/api/webhook`, async (req, res) => {
                             `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
         }
 
-        // --- B: Media Detection ---
+        // B: Media Detection (Photo, Video, Sticker, etc.)
         let mId = "", mType = "", mExtra = "";
         if (msg.photo) {
             const p = msg.photo[msg.photo.length - 1];
@@ -197,58 +201,53 @@ app.post(`/api/webhook`, async (req, res) => {
                             `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
         }
 
-        // --- C: Custom Emojis (Expandable) ---
+        // C: Custom Emoji (Line by line + Expandable)
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const customEmojis = entities.filter(e => e.type === 'custom_emoji');
         if (customEmojis.length > 0) {
-            finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
-            finalMessage += `<blockquote expandable>`;
+            finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n<blockquote expandable>`;
             customEmojis.forEach((ent, index) => {
                 finalMessage += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
             });
             finalMessage += `</blockquote>\n\n`;
         }
 
-        // --- D: Auto-Lookup (Usernames & t.me Links) ---
-        // Supports up to 3 usernames/links per message
-        const mentionEntities = entities.filter(e => e.type === 'mention' || e.type === 'url');
-        if (mentionEntities.length > 0) {
+        // D: Auto-Lookup (@username & t.me links - Max 3)
+        const lookupEntities = entities.filter(e => e.type === 'mention' || e.type === 'url');
+        if (lookupEntities.length > 0) {
             let lookupResults = "";
-            let count = 0;
-
-            for (const ent of mentionEntities) {
-                if (count >= 3) break;
+            let foundCount = 0;
+            for (const ent of lookupEntities) {
+                if (foundCount >= 3) break;
                 let target = "";
                 if (ent.type === 'mention') {
                     target = text.substring(ent.offset, ent.offset + ent.length);
                 } else if (ent.type === 'url') {
                     const url = text.substring(ent.offset, ent.offset + ent.length);
                     if (url.includes('t.me/')) {
-                        target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
+                        let parts = url.split('t.me/')[1].split('/')[0].split('?')[0];
+                        target = '@' + parts;
                     }
                 }
-
                 if (target.startsWith('@')) {
                     try {
                         const chat = await bot.getChat(target);
                         lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
-                        count++;
+                        foundCount++;
                     } catch (e) {}
                 }
             }
-
             if (lookupResults) {
-                finalMessage += `<blockquote>🔍 <b>Auto Lookup (Max 3)</b></blockquote>\n\n`;
-                finalMessage += `<blockquote expandable>${lookupResults}</blockquote>`;
+                finalMessage += `<blockquote>🔍 <b>Auto Lookup (Max 3)</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
             }
         }
 
-        // Send results if any detection happened
+        // Final Response
         if (finalMessage) {
             return await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
         }
 
-        // 6. Fallback (If nothing detected)
+        // 6. Fallback (Pic 2 fix: unrecognized text)
         if (text && !text.startsWith('/')) {
             await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
         }
@@ -256,8 +255,9 @@ app.post(`/api/webhook`, async (req, res) => {
     } catch (err) {
         console.error("Critical Error:", err);
     }
-    res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("ID Checker Bot Active"));
+app.listen(PORT, () => {
+    console.log(`ID Checker Bot is running on port ${PORT}`);
+});
