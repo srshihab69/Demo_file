@@ -59,8 +59,9 @@ const strings = {
         `🤖 Status: <b>Online</b></blockquote>`,
 
     id_err: 
-        `<blockquote>❌ <b>Please use the command like this:</b></blockquote>\n\n` +
-        `<blockquote> · /id @username\n` +
+        `<blockquote>❌ <b>Command Error</b></blockquote>\n\n` +
+        `<blockquote>Please use the command like this:\n` +
+        ` · /id @username\n` +
         ` · Or reply to a message with /id</blockquote>`,
 
     guide: 
@@ -72,7 +73,6 @@ const strings = {
         `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
-// Main Keyboard
 const mainKeyboard = {
     reply_markup: {
         keyboard: [
@@ -84,17 +84,16 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Webhook Handling
+// --- Webhook Handling ---
 app.post(`/api/webhook`, async (req, res) => {
     try {
         const update = req.body;
         const msg = update.message;
-        if (!msg) {
-            return res.status(200).send('OK');
-        }
+        if (!msg) return res.status(200).send('OK');
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
+        const entities = (msg.entities || []).concat(msg.caption_entities || []);
         let isProcessed = false;
 
         // 1. Basic Commands
@@ -108,7 +107,7 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text === '/ping') {
             isProcessed = true;
-            const latency = Math.floor(Math.random() * 5) + 43;
+            const latency = Math.floor(Math.random() * 10) + 40;
             await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
@@ -119,12 +118,13 @@ app.post(`/api/webhook`, async (req, res) => {
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
                 await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
-            } else if (args.length > 1 && args[1].startsWith('@')) {
+            } else if (args.length > 1) {
+                const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
                 try {
-                    const chat = await bot.getChat(args[1]);
+                    const chat = await bot.getChat(target);
                     await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
                 } catch (e) {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>User not found.</blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>Username not found.</blockquote>`, { parse_mode: 'HTML' });
                 }
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
@@ -140,11 +140,11 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text === '☎️ Support') {
             isProcessed = true;
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b></blockquote>\n\n` +
-                `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Developer Support</b></blockquote>\n\n` +
+                `<blockquote>⚡ Contact developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 4. User Shared
+        // 4. User Shared via Keyboard
         else if (msg.user_shared) {
             isProcessed = true;
             const userId = msg.user_shared.user_id;
@@ -161,7 +161,7 @@ app.post(`/api/webhook`, async (req, res) => {
         // 5. Detection (Forward, Media, Emoji, Auto-lookup)
         else {
             let finalMessage = "";
-            const entities = (msg.entities || []).concat(msg.caption_entities || []);
+            let inlineButtons = [];
 
             // A: Forward Source
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
@@ -188,10 +188,10 @@ app.post(`/api/webhook`, async (req, res) => {
                 mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
             } else if (msg.animation) {
                 mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
-                mExtra = `\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
+                mExtra = `\n📛 Name: <code>${msg.animation.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
             } else if (msg.sticker) {
                 mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
-                mExtra = `\n📐 Res: <code>${msg.sticker.width}x${msg.sticker.height}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
+                mExtra = `\n📦 Set: <code>${msg.sticker.set_name || 'None'}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
             } else if (msg.document) {
                 mId = msg.document.file_id; mType = "📄 File Detected";
                 mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
@@ -218,28 +218,34 @@ app.post(`/api/webhook`, async (req, res) => {
                 finalMessage += `</blockquote>\n\n`;
             }
 
-            // D: Auto-Lookup
-            const lookupEntities = entities.filter(e => e.type === 'mention' || e.type === 'url');
-            if (lookupEntities.length > 0) {
+            // D: Auto-Lookup (User, Bot, Channel, Group)
+            const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
+            if (lookups.length > 0) {
                 let lookupResults = "";
-                let foundCount = 0;
-                for (const ent of lookupEntities) {
-                    if (foundCount >= 3) break;
+                for (let i = 0; i < Math.min(lookups.length, 3); i++) {
                     let target = "";
-                    if (ent.type === 'mention') {
-                        target = text.substring(ent.offset, ent.offset + ent.length);
-                    } else if (ent.type === 'url') {
-                        const url = text.substring(ent.offset, ent.offset + ent.length);
+                    if (lookups[i].type === 'mention') {
+                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                    } else if (lookups[i].type === 'url') {
+                        const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
                         if (url.includes('t.me/')) {
-                            let parts = url.split('t.me/')[1].split('/')[0].split('?')[0];
-                            target = '@' + parts;
+                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
                         }
                     }
+
                     if (target.startsWith('@')) {
                         try {
                             const chat = await bot.getChat(target);
                             lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
-                            foundCount++;
+                            
+                            // Inline buttons based on type
+                            if (chat.type === 'private') {
+                                const isBot = target.toLowerCase().endsWith('bot');
+                                inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
+                            } else {
+                                const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
+                                inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
+                            }
                         } catch (e) {}
                     }
                 }
@@ -250,7 +256,10 @@ app.post(`/api/webhook`, async (req, res) => {
 
             if (finalMessage) {
                 isProcessed = true;
-                await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, finalMessage, { 
+                    parse_mode: 'HTML', 
+                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
+                });
             } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
@@ -259,14 +268,9 @@ app.post(`/api/webhook`, async (req, res) => {
     } catch (err) {
         console.error("Critical Error:", err);
     } finally {
-        // সব প্রসেসিং শেষ হওয়ার পর কেবল ভার্সেলকে রেসপন্স পাঠানো হচ্ছে
-        if (!res.headersSent) {
-            res.status(200).send('OK');
-        }
+        if (!res.headersSent) res.status(200).send('OK');
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`ID Checker Bot Active on Port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`ID Checker Bot Active on Port ${PORT}`));
