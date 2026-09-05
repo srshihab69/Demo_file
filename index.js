@@ -24,7 +24,7 @@ const strings = {
         `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
     
     help: 
-        `<blockquote expandable>🚀 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
+        `<blockquote>🚀 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
         ` · /help - Show this help menu\n` +
@@ -44,6 +44,11 @@ const strings = {
         ` · Just type @username in chat\n` +
         ` · Bot will automatically detect & look up the user info\n` +
         ` · Up to 3 usernames per message</blockquote>\n\n` +
+        `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
+        ` · Reply /id to any message to get sender's ID\n` +
+        ` · Use buttons for instant one-click ID lookup\n` +
+        ` · Forward from channels to get channel ID\n` +
+        ` · Type @username anywhere — no command needed!</blockquote>\n\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
         `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
 
@@ -84,147 +89,175 @@ app.post(`/api/webhook`, async (req, res) => {
     try {
         const update = req.body;
         const msg = update.message;
-
         if (!msg) return res.sendStatus(200);
+
         const chatId = msg.chat.id;
-        const text = msg.text;
+        const text = msg.text || msg.caption || "";
 
-        // 1. Commands
+        // 1. Basic Commands
         if (text === '/start') {
-            await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+            return await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
-        else if (text === '/help') {
-            await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
+        if (text === '/help') {
+            return await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
         }
-        else if (text === '/ping') {
-            const latency = Math.floor(Math.random() * 5) + 43; 
-            await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
+        if (text === '/ping') {
+            const latency = Math.floor(Math.random() * 50) + 10;
+            return await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. /id command (Optimized)
-        else if (text && (text === '/id' || text.startsWith('/id '))) {
+        // 2. /id Command Logic (Reply or Argument)
+        if (text.startsWith('/id')) {
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
-                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
+                return await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
             } else if (args.length > 1 && args[1].startsWith('@')) {
-                const username = args[1].replace('@', '');
+                const username = args[1];
                 try {
-                    const chat = await bot.getChat('@' + username);
-                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
+                    const chat = await bot.getChat(username);
+                    return await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
                 } catch (e) {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>User not found.</blockquote>`, { parse_mode: 'HTML' });
+                    return await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>User not found.</blockquote>`, { parse_mode: 'HTML' });
                 }
             } else {
-                await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
+                return await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
             }
         }
 
-        // 3. User Shared (via button)
-        else if (msg.user_shared) {
-            const userId = msg.user_shared.user_id;
-            const header = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n`;
-            try {
-                const user = await bot.getChat(userId);
-                const info = `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
-                await bot.sendMessage(chatId, header + info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
-            } catch (e) {
-                await bot.sendMessage(chatId, header + `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
-            }
-        }
-
-        // 4. Multi-Detection (Forward + Media + APK + Emojis)
-        else if (msg.photo || msg.video || msg.animation || msg.sticker || msg.audio || msg.document || msg.voice || msg.forward_from || msg.forward_from_chat || msg.forward_origin || (msg.entities || msg.caption_entities)) {
-            let finalMessage = "";
-
-            if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
-                let fId = 'N/A', fName = 'Protected Source';
-                if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
-                else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
-                else if (msg.forward_origin) {
-                    const o = msg.forward_origin;
-                    fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
-                    fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
-                }
-                finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
-                                `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
-            }
-
-            let mId = "", mType = "", mExtra = "";
-            if (msg.photo) {
-                const p = msg.photo[msg.photo.length - 1];
-                mId = p.file_id; mType = "📷 Photo Detected";
-                mExtra = `\n📐 Res: <code>${p.width}x${p.height}</code>\n📊 Size: <code>${formatSize(p.file_size)}</code>`;
-            } else if (msg.video) {
-                mId = msg.video.file_id; mType = "🎬 Video Detected";
-                mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
-            } else if (msg.animation) {
-                mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
-                mExtra = `\n📐 Res: <code>${msg.animation.width}x${msg.animation.height}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
-            } else if (msg.sticker) {
-                mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
-                mExtra = `\n📐 Res: <code>${msg.sticker.width}x${msg.sticker.height}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
-            } else if (msg.document) {
-                mId = msg.document.file_id; mType = "📄 File Detected";
-                mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
-            } else if (msg.audio) {
-                mId = msg.audio.file_id; mType = "🎵 Audio Detected";
-                mExtra = `\n📊 Size: <code>${formatSize(msg.audio.file_size)}</code>`;
-            } else if (msg.voice) {
-                mId = msg.voice.file_id; mType = "🎤 Voice Detected";
-            }
-
-            if (mType) {
-                finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                                `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
-            }
-
-            const allEntities = (msg.entities || []).concat(msg.caption_entities || []);
-            const customEmojis = allEntities.filter(e => e.type === 'custom_emoji');
-            if (customEmojis.length > 0) {
-                finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
-                finalMessage += `<blockquote expandable>`; // Start Expandable
-                customEmojis.forEach((ent, index) => {
-                    finalMessage += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
-                });
-                finalMessage += `</blockquote>`;
-            }
-
-            if (finalMessage) {
-                await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
-            }
-        }
-
-        // 5. Buttons
-        else if (text === '🆔 My Info') {
+        // 3. Static Buttons
+        if (text === '🆔 My Info') {
             const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
+            return await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
                                          `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
-        else if (text === '☎️ Support') {
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Contact Developer</b></blockquote>\n\n` +
-                                         `<blockquote>⚡ @srshihab69</blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+        if (text === '☎️ Support') {
+            return await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b></blockquote>\n\n` +
+                                         `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 6. Auto-lookup (@username)
-        else if (text && text.startsWith('@')) {
-            const uname = text.replace('@', '');
+        // 4. User Shared (from Button)
+        if (msg.user_shared) {
+            const userId = msg.user_shared.user_id;
             try {
-                const u = await bot.getChat('@' + uname);
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name || u.title}</code></blockquote>`, { parse_mode: 'HTML' });
-            } catch (e) {}
+                const user = await bot.getChat(userId);
+                const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n` +
+                             `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+                return await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
+            } catch (e) {
+                return await bot.sendMessage(chatId, `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+            }
         }
 
-        // 7. Fallback: How to use bot (Pic 2 fix)
-        else if (text && !text.startsWith('/')) {
+        // 5. Detection: Forward, Media, Custom Emojis
+        let finalMessage = "";
+
+        // --- A: Forward Detection ---
+        if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
+            let fId = 'N/A', fName = 'Protected Source';
+            if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
+            else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
+            else if (msg.forward_origin) {
+                const o = msg.forward_origin;
+                fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
+                fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
+            }
+            finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
+                            `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
+        }
+
+        // --- B: Media Detection ---
+        let mId = "", mType = "", mExtra = "";
+        if (msg.photo) {
+            const p = msg.photo[msg.photo.length - 1];
+            mId = p.file_id; mType = "📷 Photo Detected";
+            mExtra = `\n📐 Res: <code>${p.width}x${p.height}</code>\n📊 Size: <code>${formatSize(p.file_size)}</code>`;
+        } else if (msg.video) {
+            mId = msg.video.file_id; mType = "🎬 Video Detected";
+            mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
+        } else if (msg.animation) {
+            mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
+            mExtra = `\n📐 Res: <code>${msg.animation.width}x${msg.animation.height}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
+        } else if (msg.sticker) {
+            mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
+            mExtra = `\n📐 Res: <code>${msg.sticker.width}x${msg.sticker.height}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
+        } else if (msg.document) {
+            mId = msg.document.file_id; mType = "📄 File Detected";
+            mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
+        } else if (msg.audio) {
+            mId = msg.audio.file_id; mType = "🎵 Audio Detected";
+            mExtra = `\n📊 Size: <code>${formatSize(msg.audio.file_size)}</code>`;
+        } else if (msg.voice) {
+            mId = msg.voice.file_id; mType = "🎤 Voice Detected";
+            mExtra = `\n⏳ Duration: <code>${msg.voice.duration}s</code>`;
+        }
+
+        if (mType) {
+            finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
+                            `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
+        }
+
+        // --- C: Custom Emojis (Expandable) ---
+        const entities = (msg.entities || []).concat(msg.caption_entities || []);
+        const customEmojis = entities.filter(e => e.type === 'custom_emoji');
+        if (customEmojis.length > 0) {
+            finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
+            finalMessage += `<blockquote expandable>`;
+            customEmojis.forEach((ent, index) => {
+                finalMessage += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
+            });
+            finalMessage += `</blockquote>\n\n`;
+        }
+
+        // --- D: Auto-Lookup (Usernames & t.me Links) ---
+        // Supports up to 3 usernames/links per message
+        const mentionEntities = entities.filter(e => e.type === 'mention' || e.type === 'url');
+        if (mentionEntities.length > 0) {
+            let lookupResults = "";
+            let count = 0;
+
+            for (const ent of mentionEntities) {
+                if (count >= 3) break;
+                let target = "";
+                if (ent.type === 'mention') {
+                    target = text.substring(ent.offset, ent.offset + ent.length);
+                } else if (ent.type === 'url') {
+                    const url = text.substring(ent.offset, ent.offset + ent.length);
+                    if (url.includes('t.me/')) {
+                        target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
+                    }
+                }
+
+                if (target.startsWith('@')) {
+                    try {
+                        const chat = await bot.getChat(target);
+                        lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
+                        count++;
+                    } catch (e) {}
+                }
+            }
+
+            if (lookupResults) {
+                finalMessage += `<blockquote>🔍 <b>Auto Lookup (Max 3)</b></blockquote>\n\n`;
+                finalMessage += `<blockquote expandable>${lookupResults}</blockquote>`;
+            }
+        }
+
+        // Send results if any detection happened
+        if (finalMessage) {
+            return await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
+        }
+
+        // 6. Fallback (If nothing detected)
+        if (text && !text.startsWith('/')) {
             await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
         }
 
     } catch (err) {
-        console.error("Error:", err);
+        console.error("Critical Error:", err);
     }
-    res.status(200).send('OK');
+    res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Bot is Active"));
+app.listen(PORT, () => console.log("ID Checker Bot Active"));
