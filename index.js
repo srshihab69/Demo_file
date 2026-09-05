@@ -8,17 +8,6 @@ const bot = new TelegramBot(token);
 const app = express();
 app.use(bodyParser.json());
 
-// --- Custom Premium Emojis ---
-const E = {
-    diamond: '<tg-emoji emoji-id="5427168083074628963">💎</tg-emoji>',
-    link: '<tg-emoji emoji-id="5427168083074628963">🔗</tg-emoji>',
-    robot: '<tg-emoji emoji-id="5353025608832004653">🤖</tg-emoji>',
-    crown: '<tg-emoji emoji-id="5217822164362739968">👑</tg-emoji>',
-    dev: '<tg-emoji emoji-id="5357069174512303778">👨‍💻</tg-emoji>',
-    sync: '<tg-emoji emoji-id="5017470156276761427">🔄</tg-emoji>',
-    bolt: '<tg-emoji emoji-id="5456140674028019486">⚡</tg-emoji>'
-};
-
 // --- Helper: Format File Size ---
 const formatSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -31,11 +20,11 @@ const formatSize = (bytes) => {
 // --- Premium Text Data ---
 const strings = {
     welcome: (name) => 
-        `<blockquote>👋 ${E.robot} <b>Hello, ${name}!</b></blockquote>\n\n` +
+        `<blockquote>👋 <b>Hello, ${name}!</b></blockquote>\n\n` +
         `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
     
     help: 
-        `<blockquote>${E.crown} <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
+        `<blockquote>🚀 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
         ` · /help - Show this help menu\n` +
@@ -65,9 +54,9 @@ const strings = {
 
     ping: (lat) => 
         `<blockquote>🏓 <b>Pong!</b></blockquote>\n\n` +
-        `<blockquote>${E.bolt} Latency: <code>${lat}ms</code>\n` +
-        `${E.sync} Uptime: <b>Always Active</b>\n` +
-        `${E.robot} Status: <b>Online</b></blockquote>`,
+        `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
+        `🕒 Uptime: <b>Always Active</b>\n` +
+        `🤖 Status: <b>Online</b></blockquote>`,
 
     id_err: 
         `<blockquote>❌ <b>Command Error</b></blockquote>\n\n` +
@@ -76,11 +65,11 @@ const strings = {
         ` · Or reply to a message with /id</blockquote>`,
 
     guide: 
-        `<blockquote>${E.link} ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
+        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
         `<blockquote>📱 Use keyboard buttons to get IDs\n` +
         `📎 Send any file to get its file_id\n` +
         `📩 Forward messages to get source ID\n` +
-        `${E.link} Send t.me links to parse chat IDs\n` +
+        `🔗 Send t.me links to parse chat IDs\n` +
         `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
@@ -162,20 +151,20 @@ app.post(`/api/webhook`, async (req, res) => {
                 mExtra = `\n⏳ Duration: <code>${msg.voice.duration}s</code>`;
             }
 
-            if (mType) {
+            if (mId) {
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
                                 `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
             }
 
-            // --- C: Check Premium Emojis (List Format) ---
+            // --- C: Check Premium Emojis (Updated Line by Line) ---
             const allEntities = (msg.entities || []).concat(msg.caption_entities || []);
             const customEmojis = allEntities.filter(e => e.type === 'custom_emoji');
 
             if (customEmojis.length > 0) {
-                finalMessage += `<blockquote>${E.diamond} <b>Premium Emoji Detected</b></blockquote>\n\n`;
+                finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
                 customEmojis.forEach((ent, index) => {
-                    // ID গুলো এখন প্রতি লাইনে একটি করে শো করবে
-                    finalMessage += `<blockquote>🆔 ID: <code>${ent.custom_emoji_id}</code></blockquote>\n`;
+                    // এখানে \n যোগ করা হয়েছে যাতে প্রতিটা আইডি আলাদা লাইনে দেখায়
+                    finalMessage += `<blockquote>🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code></blockquote>\n`;
                 });
             }
 
@@ -186,7 +175,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
         }
 
-        // 3. User Shared
+        // 3. User Shared (via button)
         else if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
             const header = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n`;
@@ -226,12 +215,7 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text === '☎️ Support') {
             await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b></blockquote>\n\n` +
-                                         `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { 
-                                            parse_mode: 'HTML', 
-                                            reply_markup: { 
-                                                inline_keyboard: [[{ text: `${E.dev} Developer`, url: 'https://t.me/srshihab69' }]] 
-                                            } 
-                                         });
+                                         `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
         // 6. Auto-lookup (@username)
