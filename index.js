@@ -3,7 +3,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 
 const token = process.env.BOT_TOKEN;
-// Webhook ব্যবহার করলে polling: false রাখতে হয়
 const bot = new TelegramBot(token);
 
 const app = express();
@@ -87,8 +86,8 @@ const mainKeyboard = {
 
 // Webhook Handling
 app.post(`/api/webhook`, async (req, res) => {
-    // টেলিগ্রামকে দ্রুত ২০০ ওকে পাঠানো জরুরি
-    res.sendStatus(200);
+    // টেলিগ্রামকে দ্রুত রেসপন্স পাঠানো যাতে রিকোয়েস্ট কিউতে না থাকে
+    res.status(200).send('OK');
 
     try {
         const update = req.body;
@@ -97,29 +96,33 @@ app.post(`/api/webhook`, async (req, res) => {
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
+        let isProcessed = false;
 
         // 1. Basic Commands
         if (text === '/start') {
+            isProcessed = true;
             return await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
         if (text === '/help') {
+            isProcessed = true;
             return await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
         }
         if (text === '/ping') {
+            isProcessed = true;
             const latency = Math.floor(Math.random() * 50) + 10;
             return await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. /id Command Logic
+        // 2. /id Command
         if (text.startsWith('/id')) {
+            isProcessed = true;
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
                 return await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
             } else if (args.length > 1 && args[1].startsWith('@')) {
-                const username = args[1];
                 try {
-                    const chat = await bot.getChat(username);
+                    const chat = await bot.getChat(args[1]);
                     return await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
                 } catch (e) {
                     return await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>User not found.</blockquote>`, { parse_mode: 'HTML' });
@@ -131,29 +134,32 @@ app.post(`/api/webhook`, async (req, res) => {
 
         // 3. Static Buttons
         if (text === '🆔 My Info') {
+            isProcessed = true;
             const u = msg.from;
             return await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
-                                         `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
+                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         if (text === '☎️ Support') {
+            isProcessed = true;
             return await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b></blockquote>\n\n` +
-                                         `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+                `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 4. User Shared (via button)
+        // 4. User Shared (Fixed: First time response)
         if (msg.user_shared) {
+            isProcessed = true;
             const userId = msg.user_shared.user_id;
             try {
                 const user = await bot.getChat(userId);
                 const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n` +
-                             `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+                    `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 return await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                return await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                return await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted by user privacy.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
-        // 5. Multi-Detection (Forward, Media, Emoji, Auto-lookup)
+        // 5. Detection (Forward, Media, Emoji, Auto-lookup)
         let finalMessage = "";
 
         // A: Forward Source
@@ -167,10 +173,10 @@ app.post(`/api/webhook`, async (req, res) => {
                 fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
             }
             finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
-                            `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
+                `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
         }
 
-        // B: Media Detection (Photo, Video, Sticker, etc.)
+        // B: Media Detection
         let mId = "", mType = "", mExtra = "";
         if (msg.photo) {
             const p = msg.photo[msg.photo.length - 1];
@@ -198,21 +204,21 @@ app.post(`/api/webhook`, async (req, res) => {
 
         if (mType) {
             finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                            `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
+                `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
         }
 
-        // C: Custom Emoji (Line by line + Expandable)
+        // C: Custom Emoji
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const customEmojis = entities.filter(e => e.type === 'custom_emoji');
         if (customEmojis.length > 0) {
             finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n<blockquote expandable>`;
             customEmojis.forEach((ent, index) => {
-                finalMessage += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
+                finalMessage += `🆔 Emoji ${index + 1} ID: <code>${ent.custom_emoji_id}</code>\n`;
             });
             finalMessage += `</blockquote>\n\n`;
         }
 
-        // D: Auto-Lookup (@username & t.me links - Max 3)
+        // D: Auto-Lookup (Fixed naming & Speed)
         const lookupEntities = entities.filter(e => e.type === 'mention' || e.type === 'url');
         if (lookupEntities.length > 0) {
             let lookupResults = "";
@@ -238,17 +244,18 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
             }
             if (lookupResults) {
-                finalMessage += `<blockquote>🔍 <b>Auto Lookup (Max 3)</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
+                finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
             }
         }
 
-        // Final Response
+        // Final Output
         if (finalMessage) {
+            isProcessed = true;
             return await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
         }
 
-        // 6. Fallback (Pic 2 fix: unrecognized text)
-        if (text && !text.startsWith('/')) {
+        // 6. Fallback (If nothing else was processed)
+        if (text && !text.startsWith('/') && !isProcessed) {
             await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
         }
 
@@ -259,5 +266,5 @@ app.post(`/api/webhook`, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`ID Checker Bot is running on port ${PORT}`);
+    console.log(`ID Checker Bot Active on Port ${PORT}`);
 });
