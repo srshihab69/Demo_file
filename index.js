@@ -107,11 +107,10 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. Multi-Detection (Forward + Media + APK/File + Emojis)
+        // 2. Multi-Detection
         else if (msg.photo || msg.video || msg.animation || msg.sticker || msg.audio || msg.document || msg.voice || msg.forward_from || msg.forward_from_chat || msg.forward_origin || (msg.entities || msg.caption_entities)) {
             let finalMessage = "";
 
-            // --- A: Check Forward Source ---
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
                 let fId = 'N/A', fName = 'Protected Source';
                 if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
@@ -121,11 +120,10 @@ app.post(`/api/webhook`, async (req, res) => {
                     fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
                     fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
                 }
-                finalMessage += `<blockquote>📩 <b>Forwarded Message</b>\n\n` +
-                                `🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
+                finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
+                                `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
             }
 
-            // --- B: Check Media ---
             let mId = "", mType = "", mExtra = "";
             if (msg.photo) {
                 mId = msg.photo[msg.photo.length - 1].file_id; mType = "📷 Photo Detected";
@@ -150,17 +148,19 @@ app.post(`/api/webhook`, async (req, res) => {
                 mExtra = `\n⏳ Duration: <code>${msg.voice.duration}s</code>`;
             }
 
-            if (mId) {
-                finalMessage += `<blockquote>✨ <b>${mType}</b>\n\n` +
-                                `🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
+            if (mType) {
+                finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
+                                `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
             }
 
-            // --- C: Check Premium Emojis (Line by Line inside One Box) ---
+            // --- Premium Emoji Detection (Line by Line + Collapse if > 3) ---
             const allEntities = (msg.entities || []).concat(msg.caption_entities || []);
             const customEmojis = allEntities.filter(e => e.type === 'custom_emoji');
 
             if (customEmojis.length > 0) {
-                let emojiSection = `<blockquote>💎 <b>Premium Emoji Detected</b>\n\n`;
+                const isExpandable = customEmojis.length > 3 ? ' expandable' : '';
+                let emojiSection = `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
+                emojiSection += `<blockquote${isExpandable}>`;
                 customEmojis.forEach((ent, index) => {
                     emojiSection += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
                 });
@@ -175,16 +175,16 @@ app.post(`/api/webhook`, async (req, res) => {
             }
         }
 
-        // 3. User Shared
+        // 3. User Shared (Restore Original Style)
         else if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
-            const header = `<blockquote>🔍 <b>Shared User Info</b>\n\n`;
+            const header = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n`;
             try {
                 const user = await bot.getChat(userId);
-                const info = `🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+                const info = `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 await bot.sendMessage(chatId, header + info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                await bot.sendMessage(chatId, header + `🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, header + `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
@@ -193,29 +193,29 @@ app.post(`/api/webhook`, async (req, res) => {
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
-                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b>\n\n🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
             } else if (args.length > 1 && args[1].startsWith('@')) {
                 const username = args[1].replace('@', '');
                 try {
                     const chat = await bot.getChat('@' + username);
-                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b>\n\n🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
                 } catch (e) {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b>\n\nUser not found.</blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>User not found.</blockquote>`, { parse_mode: 'HTML' });
                 }
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
             }
         }
 
-        // 5. Buttons
+        // 5. Buttons (Restore Original Style)
         else if (text === '🆔 My Info') {
             const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b>\n\n` +
-                                         `🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
+                                         `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '☎️ Support') {
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b>\n\n` +
-                                         `⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug</b></blockquote>\n\n` +
+                                         `<blockquote>⚡ Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
         // 6. Auto-lookup (@username)
@@ -223,7 +223,7 @@ app.post(`/api/webhook`, async (req, res) => {
             const uname = text.replace('@', '');
             try {
                 const u = await bot.getChat('@' + uname);
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Auto Lookup</b>\n\n🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name || u.title}</code></blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name || u.title}</code></blockquote>`, { parse_mode: 'HTML' });
             } catch (e) {}
         }
 
