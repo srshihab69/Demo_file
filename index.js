@@ -36,7 +36,7 @@ const strings = {
         ` · ☎️ Support - Contact developer</blockquote>\n\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
-        ` · 📷 Send Photo/Video → Get file_id\n` +
+        ` · 📷 Send Photo/Video → Get file_id & Res\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -107,10 +107,11 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. Multi-Detection
+        // 2. Multi-Detection (Forward + Media + APK/File + Emojis)
         else if (msg.photo || msg.video || msg.animation || msg.sticker || msg.audio || msg.document || msg.voice || msg.forward_from || msg.forward_from_chat || msg.forward_origin || (msg.entities || msg.caption_entities)) {
             let finalMessage = "";
 
+            // --- A: Check Forward Source ---
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
                 let fId = 'N/A', fName = 'Protected Source';
                 if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
@@ -124,19 +125,22 @@ app.post(`/api/webhook`, async (req, res) => {
                                 `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
             }
 
+            // --- B: Check Media (Photo, Video, APK, Document, Audio) ---
             let mId = "", mType = "", mExtra = "";
+
             if (msg.photo) {
-                mId = msg.photo[msg.photo.length - 1].file_id; mType = "📷 Photo Detected";
-                mExtra = `\n📊 Size: <code>${formatSize(msg.photo[msg.photo.length - 1].file_size)}</code>`;
+                const photo = msg.photo[msg.photo.length - 1];
+                mId = photo.file_id; mType = "📷 Photo Detected";
+                mExtra = `\n📐 Res: <code>${photo.width}x${photo.height}</code>\n📊 Size: <code>${formatSize(photo.file_size)}</code>`;
             } else if (msg.video) {
                 mId = msg.video.file_id; mType = "🎬 Video Detected";
-                mExtra = `\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
+                mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
             } else if (msg.animation) {
                 mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
-                mExtra = `\n📛 Name: <code>${msg.animation.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
+                mExtra = `\n📐 Res: <code>${msg.animation.width}x${msg.animation.height}</code>\n📛 Name: <code>${msg.animation.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
             } else if (msg.sticker) {
                 mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
-                mExtra = `\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>\n📦 Set: <code>${msg.sticker.set_name || 'None'}</code>`;
+                mExtra = `\n📐 Res: <code>${msg.sticker.width}x${msg.sticker.height}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>\n📦 Set: <code>${msg.sticker.set_name || 'None'}</code>`;
             } else if (msg.document) {
                 mId = msg.document.file_id; mType = "📄 File/APK Detected";
                 mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
@@ -153,19 +157,15 @@ app.post(`/api/webhook`, async (req, res) => {
                                 `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
             }
 
-            // --- Premium Emoji Detection (Line by Line + Collapse if > 3) ---
+            // --- C: Check Premium Emojis (line-by-line) ---
             const allEntities = (msg.entities || []).concat(msg.caption_entities || []);
             const customEmojis = allEntities.filter(e => e.type === 'custom_emoji');
 
             if (customEmojis.length > 0) {
-                const isExpandable = customEmojis.length > 3 ? ' expandable' : '';
-                let emojiSection = `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
-                emojiSection += `<blockquote${isExpandable}>`;
+                finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n`;
                 customEmojis.forEach((ent, index) => {
-                    emojiSection += `🆔 Emoji ${index+1} ID: <code>${ent.custom_emoji_id}</code>\n`;
+                    finalMessage += `<blockquote>🆔 Emoji ${index + 1} ID: <code>${ent.custom_emoji_id}</code></blockquote>\n`;
                 });
-                emojiSection += `</blockquote>`;
-                finalMessage += emojiSection;
             }
 
             if (finalMessage) {
@@ -175,7 +175,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
         }
 
-        // 3. User Shared (Restore Original Style)
+        // 3. User Shared (via button)
         else if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
             const header = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n`;
@@ -207,7 +207,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
         }
 
-        // 5. Buttons (Restore Original Style)
+        // 5. Buttons
         else if (text === '🆔 My Info') {
             const u = msg.from;
             await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
