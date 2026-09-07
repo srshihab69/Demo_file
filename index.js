@@ -1,30 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const bodyParser = require('body-parser');
-const mongoose = require('mongoose');
 
-// --- Configuration ---
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token);
 
-// তোমার দেওয়া MongoDB URI সরাসরি কোডে অ্যাড করা হলো
-const mongoUri = "mongodb+srv://srshihab69tg_db_user:I6OHNtnFgeVsrCd6@cluster0.fkxgtiv.mongodb.net/?appName=Cluster0";
-
 const app = express();
 app.use(bodyParser.json());
-
-// --- MongoDB Database Connection ---
-mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("Database Connected"))
-    .catch(err => console.error("Database Error:", err));
-
-// ইউজার ডাটাবেজ মডেল (বট স্টার্ট করা ইউজারদের মনে রাখার জন্য)
-const UserSchema = new mongoose.Schema({
-    userId: Number,
-    username: String,
-    firstName: String
-});
-const User = mongoose.model('BotUser', UserSchema);
 
 // --- Helper: Format File Size ---
 const formatSize = (bytes) => {
@@ -42,7 +24,7 @@ const strings = {
         `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
     
     help: 
-        `<blockquote>🚀 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
+        `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
         ` · /help - Show this help menu\n` +
@@ -52,12 +34,44 @@ const strings = {
         ` · 👤 User Info - Get any user's ID\n` +
         ` · 🆔 My Info - Get your own ID details\n` +
         ` · ☎️ Support - Contact developer</blockquote>\n\n` +
+        `<blockquote expandable>✨ <b>Special Features:</b>\n` +
+        ` · 📩 Forward Msg → Get source & media ID\n` +
+        ` · 📷 Send Photo/Video → Get file_id & Res\n` +
+        ` · 🎭 Send Sticker/Emoji → Get ID\n` +
+        ` · 📄 Send Document → Get file_id\n` +
+        ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
+        `<blockquote expandable>🔍 <b>Auto-Detect:</b>\n` +
+        ` · Just type @username in chat\n` +
+        ` · Bot will automatically detect & look up the user info\n` +
+        ` · Works for users, bots, channels & groups!\n` +
+        ` · Up to 3 usernames per message</blockquote>\n\n` +
+        `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
+        ` · Reply /id to any message to get sender's ID\n` +
+        ` · Use buttons for instant one-click ID lookup\n` +
+        ` · Forward from channels to get channel ID\n` +
+        ` · Type @username anywhere — no command needed!</blockquote>\n\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
         `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
 
-    ping: (lat) => `<blockquote>🏓 <b>Pong!</b></blockquote>\n\n<blockquote>⚡ Latency: <code>${lat}ms</code>\n🤖 Status: <b>Online</b></blockquote>`,
+    ping: (lat) => 
+        `<blockquote>😀 <b>Pong!</b></blockquote>\n\n` +
+        `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
+        `🕒 Uptime: <b>Always Active</b>\n` +
+        `🤖 Status: <b>Online</b></blockquote>`,
 
-    guide: `<blockquote>ℹ️ <b>How to use:</b></blockquote>\n\n<blockquote>Send @username or any media to get details.</blockquote>`
+    id_err: 
+        `<blockquote>❌ <b>Command Error</b></blockquote>\n\n` +
+        `<blockquote>Please use the command like this:\n` +
+        ` · /id @username\n` +
+        ` · Or reply to a message with /id</blockquote>`,
+
+    guide: 
+        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
+        `<blockquote>📱 Use keyboard buttons to get IDs\n` +
+        `📎 Send any file to get its file_id\n` +
+        `📩 Forward messages to get source ID\n` +
+        `🔗 Send t.me links to parse chat IDs\n` +
+        `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
 const mainKeyboard = {
@@ -80,18 +94,10 @@ app.post(`/api/webhook`, async (req, res) => {
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
+        const entities = (msg.entities || []).concat(msg.caption_entities || []);
         let isProcessed = false;
 
-        // --- ইউজারের ডাটা সেভ করা (যাতে পরে ইউজারনেম দিয়ে খুঁজে পাওয়া যায়) ---
-        if (msg.from && msg.from.username) {
-            await User.findOneAndUpdate(
-                { userId: msg.from.id },
-                { username: msg.from.username.toLowerCase(), firstName: msg.from.first_name },
-                { upsert: true }
-            );
-        }
-
-        // 1. Commands
+        // 1. Basic Commands
         if (text === '/start') {
             isProcessed = true;
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
@@ -102,83 +108,171 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text === '/ping') {
             isProcessed = true;
-            await bot.sendMessage(chatId, strings.ping(45), { parse_mode: 'HTML' });
+            const latency = Math.floor(Math.random() * 10) + 40;
+            await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
-        // 2. My Info & Support
+        // 2. /id Command
+        else if (text.startsWith('/id')) {
+            isProcessed = true;
+            const args = text.split(' ');
+            if (msg.reply_to_message) {
+                const ruid = msg.reply_to_message.from.id;
+                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
+            } else if (args.length > 1) {
+                const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
+                try {
+                    const chat = await bot.getChat(target);
+                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
+                } catch (e) {
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>Username not found.</blockquote>`, { parse_mode: 'HTML' });
+                }
+            } else {
+                await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
+            }
+        }
+
+        // 3. Static Buttons
         else if (text === '🆔 My Info') {
             isProcessed = true;
             const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}</blockquote>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
+                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '☎️ Support') {
             isProcessed = true;
-            await bot.sendMessage(chatId, `⚡ Developer: @srshihab69`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n\n` +
+                `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
+                ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 3. AUTO-LOOKUP (ইউজারনেম ডিটেকশন) - ডাটাবেজ সহ
-        const usernameRegex = /@(\w{4,})/g;
-        const matches = text.match(usernameRegex);
-
-        if (!isProcessed && matches) {
+        // 4. User Shared via Keyboard
+        else if (msg.user_shared) {
             isProcessed = true;
-            let results = "";
+            const userId = msg.user_shared.user_id;
+            try {
+                const user = await bot.getChat(userId);
+                const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n` +
+                    `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n📧 User: @${user.username || 'N/A'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+                await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
+            } catch (e) {
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+            }
+        }
+
+        // 5. Detection (Forward, Media, Emoji, Auto-lookup)
+        else {
+            let finalMessage = "";
             let inlineButtons = [];
 
-            for (const target of matches.slice(0, 3)) {
-                const clean = target.replace('@', '').toLowerCase();
-                
-                // প্রথমে ডাটাবেজে দেখি সে আগে বট স্টার্ট করেছে কি না
-                const dbUser = await User.findOne({ username: clean });
+            // A: Forward Source
+            if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
+                let fId = 'N/A', fName = 'Protected Source';
+                if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
+                else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
+                else if (msg.forward_origin) {
+                    const o = msg.forward_origin;
+                    fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
+                    fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
+                }
+                finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
+                    `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
+            }
 
-                if (dbUser) {
-                    results += `👤 <b>${dbUser.firstName}</b> (User)\n🆔 ID: <code>${dbUser.userId}</code>\n🏷️ User: @${dbUser.username}\n\n`;
-                    inlineButtons.push([{ text: `💬 Message ${dbUser.firstName}`, url: `t.me/${dbUser.username}` }]);
-                } else {
-                    // যদি ডাটাবেজে না থাকে তবে টেলিগ্রামে চ্যানেল/গ্রুপ খুঁজি
-                    try {
-                        const chat = await bot.getChat('@' + clean);
-                        results += `👤 <b>${chat.first_name || chat.title}</b> (${chat.type})\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: @${chat.username}\n\n`;
-                        inlineButtons.push([{ text: `🔗 Open ${chat.type}`, url: `t.me/${chat.username}` }]);
-                    } catch (e) {
-                        results += `⚠️ <b>@${clean}</b>: খুঁজে পাওয়া যায়নি। (ইউজারকে অবশ্যই একবার বট স্টার্ট করতে হবে)।\n\n`;
+            // B: Media Detection
+            let mId = "", mType = "", mExtra = "";
+            if (msg.photo) {
+                const p = msg.photo[msg.photo.length - 1];
+                mId = p.file_id; mType = "📷 Photo Detected";
+                mExtra = `\n📐 Res: <code>${p.width}x${p.height}</code>\n📊 Size: <code>${formatSize(p.file_size)}</code>`;
+            } else if (msg.video) {
+                mId = msg.video.file_id; mType = "🎬 Video Detected";
+                mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
+            } else if (msg.animation) {
+                mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
+                mExtra = `\n📛 Name: <code>${msg.animation.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
+            } else if (msg.sticker) {
+                mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
+                mExtra = `\n📦 Set: <code>${msg.sticker.set_name || 'None'}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
+            } else if (msg.document) {
+                mId = msg.document.file_id; mType = "📄 File Detected";
+                mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
+            } else if (msg.audio) {
+                mId = msg.audio.file_id; mType = "🎵 Audio Detected";
+                mExtra = `\n📊 Size: <code>${formatSize(msg.audio.file_size)}</code>`;
+            } else if (msg.voice) {
+                mId = msg.voice.file_id; mType = "🎤 Voice Detected";
+                mExtra = `\n⏳ Duration: <code>${msg.voice.duration}s</code>`;
+            }
+
+            if (mType) {
+                finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
+            }
+
+            // C: Custom Emoji
+            const customEmojis = entities.filter(e => e.type === 'custom_emoji');
+            if (customEmojis.length > 0) {
+                finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n<blockquote expandable>`;
+                customEmojis.forEach((ent, index) => {
+                    finalMessage += `🆔 Emoji ${index + 1} ID: <code>${ent.custom_emoji_id}</code>\n`;
+                });
+                finalMessage += `</blockquote>\n\n`;
+            }
+
+            // D: Auto-Lookup (User, Bot, Channel, Group)
+            const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
+            if (lookups.length > 0) {
+                let lookupResults = "";
+                for (let i = 0; i < Math.min(lookups.length, 3); i++) {
+                    let target = "";
+                    if (lookups[i].type === 'mention') {
+                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                    } else if (lookups[i].type === 'url') {
+                        const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                        if (url.includes('t.me/')) {
+                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
+                        }
                     }
+
+                    if (target.startsWith('@')) {
+                        try {
+                            const chat = await bot.getChat(target);
+                            lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
+                            
+                            // Inline buttons based on type
+                            if (chat.type === 'private') {
+                                const isBot = target.toLowerCase().endsWith('bot');
+                                inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
+                            } else {
+                                const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
+                                inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
+                            }
+                        } catch (e) {}
+                    }
+                }
+                if (lookupResults) {
+                    finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
                 }
             }
 
-            if (results) {
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n${results}`, { 
+            if (finalMessage) {
+                isProcessed = true;
+                await bot.sendMessage(chatId, finalMessage, { 
                     parse_mode: 'HTML', 
                     reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
                 });
-            }
-        }
-
-        // 4. Media & Forward Detection (সব আগের মতোই আছে)
-        if (!isProcessed) {
-            let finalInfo = "";
-            if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
-                const fId = msg.forward_from?.id || msg.forward_from_chat?.id || msg.forward_origin?.sender_user?.id || 'Protected';
-                finalInfo += `<blockquote>📩 <b>Forward Source ID:</b> <code>${fId}</code></blockquote>\n\n`;
-            }
-            const media = msg.photo?.[msg.photo.length - 1] || msg.video || msg.document || msg.sticker;
-            if (media) {
-                finalInfo += `<blockquote>🆔 <b>File ID:</b> <code>${media.file_id}</code>\n📊 Size: <code>${formatSize(media.file_size)}</code></blockquote>`;
-            }
-
-            if (finalInfo) {
-                await bot.sendMessage(chatId, finalInfo, { parse_mode: 'HTML' });
             } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
 
     } catch (err) {
-        console.error(err);
+        console.error("Critical Error:", err);
     } finally {
-        res.status(200).send('OK');
+        if (!res.headersSent) res.status(200).send('OK');
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Bot Running on Port ${PORT}`));
+app.listen(PORT, () => console.log(`Any ID Finder Bot Active on Port ${PORT}`));
