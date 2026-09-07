@@ -1,12 +1,30 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 
+// --- Configuration ---
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token);
 
+// তোমার দেওয়া MongoDB URI সরাসরি কোডে অ্যাড করা হলো
+const mongoUri = "mongodb+srv://srshihab69tg_db_user:I6OHNtnFgeVsrCd6@cluster0.fkxgtiv.mongodb.net/?appName=Cluster0";
+
 const app = express();
 app.use(bodyParser.json());
+
+// --- MongoDB Database Connection ---
+mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("Database Connected"))
+    .catch(err => console.error("Database Error:", err));
+
+// ইউজার ডাটাবেজ মডেল (বট স্টার্ট করা ইউজারদের মনে রাখার জন্য)
+const UserSchema = new mongoose.Schema({
+    userId: Number,
+    username: String,
+    firstName: String
+});
+const User = mongoose.model('BotUser', UserSchema);
 
 // --- Helper: Format File Size ---
 const formatSize = (bytes) => {
@@ -34,30 +52,12 @@ const strings = {
         ` · 👤 User Info - Get any user's ID\n` +
         ` · 🆔 My Info - Get your own ID details\n` +
         ` · ☎️ Support - Contact developer</blockquote>\n\n` +
-        `<blockquote expandable>✨ <b>Special Features:</b>\n` +
-        ` · 📩 Forward Msg → Get source & media ID\n` +
-        ` · 📷 Send Photo/Video → Get file_id & Res\n` +
-        ` · 🎭 Send Sticker/Emoji → Get ID\n` +
-        ` · 📄 Send Document → Get file_id\n` +
-        ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
-        `<blockquote expandable>🔍 <b>Auto-Detect:</b>\n` +
-        ` · Just type @username in chat\n` +
-        ` · Bot will automatically detect & look up the user info\n` +
-        ` · Up to 3 usernames per message</blockquote>\n\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
         `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
 
     ping: (lat) => `<blockquote>🏓 <b>Pong!</b></blockquote>\n\n<blockquote>⚡ Latency: <code>${lat}ms</code>\n🤖 Status: <b>Online</b></blockquote>`,
 
-    id_err: (target) => 
-        `<blockquote>❌ <b>Lookup Failed</b></blockquote>\n\n` +
-        `<blockquote>Target: <code>${target}</code>\n\n` +
-        `⚠️ <b>Possible Reasons:</b>\n` +
-        `1. Username is wrong.\n` +
-        `2. It's a private user who never started this bot.\n` +
-        `3. Telegram restricts bots from searching private users.</blockquote>`,
-
-    guide: `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n<blockquote>📱 Use buttons or send @username / media.</blockquote>`
+    guide: `<blockquote>ℹ️ <b>How to use:</b></blockquote>\n\n<blockquote>Send @username or any media to get details.</blockquote>`
 };
 
 const mainKeyboard = {
@@ -80,10 +80,18 @@ app.post(`/api/webhook`, async (req, res) => {
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
-        const entities = (msg.entities || []).concat(msg.caption_entities || []);
         let isProcessed = false;
 
-        // 1. Basic Commands
+        // --- ইউজারের ডাটা সেভ করা (যাতে পরে ইউজারনেম দিয়ে খুঁজে পাওয়া যায়) ---
+        if (msg.from && msg.from.username) {
+            await User.findOneAndUpdate(
+                { userId: msg.from.id },
+                { username: msg.from.username.toLowerCase(), firstName: msg.from.first_name },
+                { upsert: true }
+            );
+        }
+
+        // 1. Commands
         if (text === '/start') {
             isProcessed = true;
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
@@ -97,109 +105,80 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, strings.ping(45), { parse_mode: 'HTML' });
         }
 
-        // 2. /id Command
-        else if (text.startsWith('/id')) {
-            isProcessed = true;
-            const args = text.split(' ');
-            if (msg.reply_to_message) {
-                const ruid = msg.reply_to_message.from.id;
-                await bot.sendMessage(chatId, `<blockquote>🆔 <b>User ID:</b> <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
-            } else if (args.length > 1) {
-                const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
-                try {
-                    const chat = await bot.getChat(target);
-                    await bot.sendMessage(chatId, `<blockquote>🔍 🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
-                } catch (e) {
-                    await bot.sendMessage(chatId, strings.id_err(target), { parse_mode: 'HTML' });
-                }
-            }
-        }
-
-        // 3. Buttons (My Info, Support)
+        // 2. My Info & Support
         else if (text === '🆔 My Info') {
             isProcessed = true;
             const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}</blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '☎️ Support') {
             isProcessed = true;
-            await bot.sendMessage(chatId, `<blockquote>⚡ Contact: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+            await bot.sendMessage(chatId, `⚡ Developer: @srshihab69`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
 
-        // 4. User Shared via Keyboard
-        else if (msg.user_shared) {
+        // 3. AUTO-LOOKUP (ইউজারনেম ডিটেকশন) - ডাটাবেজ সহ
+        const usernameRegex = /@(\w{4,})/g;
+        const matches = text.match(usernameRegex);
+
+        if (!isProcessed && matches) {
             isProcessed = true;
-            const userId = msg.user_shared.user_id;
-            try {
-                const user = await bot.getChat(userId);
-                const info = `<blockquote>🔍 Shared ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name}</code>\n🏷️ User: @${user.username || 'None'}</blockquote>`;
-                await bot.sendMessage(chatId, info, { parse_mode: 'HTML' });
-            } catch (e) {
-                await bot.sendMessage(chatId, `<blockquote>🆔 Shared ID: <code>${userId}</code>\n⚠️ Details hidden by privacy.</blockquote>`, { parse_mode: 'HTML' });
-            }
-        }
-
-        // 5. Detection (Username, Media, Forward)
-        if (!isProcessed) {
-            let finalMessage = "";
+            let results = "";
             let inlineButtons = [];
 
-            // A: Auto-Lookup Username
-            const usernameRegex = /@(\w{4,})/g;
-            const matches = text.match(usernameRegex) || [];
-            
-            if (matches.length > 0) {
-                isProcessed = true;
-                let lookupResults = "";
-                for (const target of matches.slice(0, 3)) {
+            for (const target of matches.slice(0, 3)) {
+                const clean = target.replace('@', '').toLowerCase();
+                
+                // প্রথমে ডাটাবেজে দেখি সে আগে বট স্টার্ট করেছে কি না
+                const dbUser = await User.findOne({ username: clean });
+
+                if (dbUser) {
+                    results += `👤 <b>${dbUser.firstName}</b> (User)\n🆔 ID: <code>${dbUser.userId}</code>\n🏷️ User: @${dbUser.username}\n\n`;
+                    inlineButtons.push([{ text: `💬 Message ${dbUser.firstName}`, url: `t.me/${dbUser.username}` }]);
+                } else {
+                    // যদি ডাটাবেজে না থাকে তবে টেলিগ্রামে চ্যানেল/গ্রুপ খুঁজি
                     try {
-                        const chat = await bot.getChat(target);
-                        lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
-                        inlineButtons.push([{ text: `Open Profile`, url: `t.me/${chat.username}` }]);
+                        const chat = await bot.getChat('@' + clean);
+                        results += `👤 <b>${chat.first_name || chat.title}</b> (${chat.type})\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: @${chat.username}\n\n`;
+                        inlineButtons.push([{ text: `🔗 Open ${chat.type}`, url: `t.me/${chat.username}` }]);
                     } catch (e) {
-                        lookupResults += `⚠️ <b>${target}</b>: <i>Not found or private user.</i>\n\n`;
+                        results += `⚠️ <b>@${clean}</b>: খুঁজে পাওয়া যায়নি। (ইউজারকে অবশ্যই একবার বট স্টার্ট করতে হবে)।\n\n`;
                     }
                 }
-                if (lookupResults) {
-                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote>${lookupResults}</blockquote>`, { 
-                        parse_mode: 'HTML', 
-                        reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
-                    });
-                }
             }
 
-            // B: Forward Message Source
-            if (!isProcessed && (msg.forward_from || msg.forward_from_chat || msg.forward_origin)) {
-                let fId = 'Hidden';
-                if (msg.forward_from) fId = msg.forward_from.id;
-                else if (msg.forward_from_chat) fId = msg.forward_from_chat.id;
-                else if (msg.forward_origin) fId = msg.forward_origin.sender_user?.id || msg.forward_origin.chat?.id || 'Protected';
-                
-                finalMessage += `<blockquote>📩 <b>Forward Source ID:</b> <code>${fId}</code></blockquote>\n\n`;
+            if (results) {
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n${results}`, { 
+                    parse_mode: 'HTML', 
+                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
+                });
             }
+        }
 
-            // C: Media Detection
-            const media = msg.photo?.[msg.photo.length - 1] || msg.video || msg.animation || msg.sticker || msg.document || msg.audio || msg.voice;
+        // 4. Media & Forward Detection (সব আগের মতোই আছে)
+        if (!isProcessed) {
+            let finalInfo = "";
+            if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
+                const fId = msg.forward_from?.id || msg.forward_from_chat?.id || msg.forward_origin?.sender_user?.id || 'Protected';
+                finalInfo += `<blockquote>📩 <b>Forward Source ID:</b> <code>${fId}</code></blockquote>\n\n`;
+            }
+            const media = msg.photo?.[msg.photo.length - 1] || msg.video || msg.document || msg.sticker;
             if (media) {
-                finalMessage += `<blockquote>🆔 <b>File ID:</b> <code>${media.file_id}</code></blockquote>\n`;
-                if (media.file_size) finalMessage += `<blockquote>📊 Size: <code>${formatSize(media.file_size)}</code></blockquote>`;
+                finalInfo += `<blockquote>🆔 <b>File ID:</b> <code>${media.file_id}</code>\n📊 Size: <code>${formatSize(media.file_size)}</code></blockquote>`;
             }
 
-            if (finalMessage) {
-                isProcessed = true;
-                await bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' });
-            } 
-            else if (text && !text.startsWith('/') && !text.startsWith('@')) {
+            if (finalInfo) {
+                await bot.sendMessage(chatId, finalInfo, { parse_mode: 'HTML' });
+            } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
 
     } catch (err) {
-        console.error("Error:", err.message);
+        console.error(err);
     } finally {
         res.status(200).send('OK');
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Bot Active on ${PORT}`));
+app.listen(PORT, () => console.log(`Bot Running on Port ${PORT}`));
