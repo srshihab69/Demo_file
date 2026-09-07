@@ -218,36 +218,36 @@ app.post(`/api/webhook`, async (req, res) => {
                 finalMessage += `</blockquote>\n\n`;
             }
 
-            // D: Auto-Lookup (User, Bot, Channel, Group)
-            const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
-            if (lookups.length > 0) {
-                let lookupResults = "";
-                for (let i = 0; i < Math.min(lookups.length, 3); i++) {
-                    let target = "";
-                    if (lookups[i].type === 'mention') {
-                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
-                    } else if (lookups[i].type === 'url') {
-                        const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
-                        if (url.includes('t.me/')) {
-                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
-                        }
-                    }
+            // D: Auto-Lookup (User, Bot, Channel, Group) 
+            // FIXED: Regex added to detect usernames even without Telegram entities
+            const usernameRegex = /@(\w{4,})/g;
+            const matches = text.match(usernameRegex) || [];
+            
+            // Collect usernames from text matches or explicit mentions
+            let targets = [...matches];
+            entities.forEach(ent => {
+                if (ent.type === 'mention') {
+                    targets.push(text.substring(ent.offset, ent.offset + ent.length));
+                }
+            });
 
-                    if (target.startsWith('@')) {
-                        try {
-                            const chat = await bot.getChat(target);
-                            lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
+            // Remove duplicates and limit to 3
+            targets = [...new Set(targets)].slice(0, 3);
+
+            if (targets.length > 0) {
+                let lookupResults = "";
+                for (const target of targets) {
+                    try {
+                        const chat = await bot.getChat(target);
+                        lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: @${chat.username}\n\n`;
+                        
+                        // Inline buttons
+                        const btnText = chat.type === 'private' ? 
+                            (target.toLowerCase().endsWith('bot') ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`) :
+                            (chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group");
                             
-                            // Inline buttons based on type
-                            if (chat.type === 'private') {
-                                const isBot = target.toLowerCase().endsWith('bot');
-                                inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
-                            } else {
-                                const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
-                                inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
-                            }
-                        } catch (e) {}
-                    }
+                        inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
+                    } catch (e) {}
                 }
                 if (lookupResults) {
                     finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
@@ -261,6 +261,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
                 });
             } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
+                // Only show guide if no other features matched
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
