@@ -276,6 +276,18 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
+                    // Resolve shortened/share links if needed
+                    if (targetUrl.includes('facebook.com/share/') || targetUrl.includes('fb.watch') || targetUrl.includes('fb.me')) {
+                        try {
+                            const headRes = await fetch(targetUrl, { method: 'HEAD', redirect: 'follow' });
+                            if (headRes.url) {
+                                targetUrl = headRes.url;
+                            }
+                        } catch (redirectErr) {
+                            // Proceed with original if redirect fails
+                        }
+                    }
+
                     if (isTikTok) {
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                             headers: {
@@ -288,34 +300,50 @@ app.post(`/api/webhook`, async (req, res) => {
                             videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                         }
                     } else {
-                        // Updated reliable multi-endpoint fetch approach for Facebook videos
-                        const apiRes = await fetch(`https://www.getmyfb.com/process`, {
+                        // Using a stable open API endpoint for Facebook downloads
+                        const apiRes = await fetch(`https://getmyfb.com/process`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Origin': 'https://getmyfb.com',
+                                'Referer': 'https://getmyfb.com/'
                             },
                             body: `id=${encodeURIComponent(targetUrl)}&locale=en`
                         });
                         
-                        // Fallback response check or alternative public api if getmyfb text/html returns
                         const textData = await apiRes.text();
                         try {
                             const jsonData = JSON.parse(textData);
-                            if (jsonData && jsonData.success) {
-                                // Extract video links from HTML response or json object structure
-                                const match = jsonData.html.match(/href="([^"]+)"[^>]*>Download HD/i) || jsonData.html.match(/href="([^"]+)"[^>]*>Download SD/i) || jsonData.html.match(/href="(https:\/\/[^"]+)"/i);
-                                if (match) videoDownloadUrl = match[1];
+                            if (jsonData && jsonData.success && jsonData.html) {
+                                const hdMatch = jsonData.html.match(/href="([^"]+)"[^>]*>Download HD/i);
+                                const sdMatch = jsonData.html.match(/href="([^"]+)"[^>]*>Download SD/i);
+                                const generalMatch = jsonData.html.match(/href="(https:\/\/[^"]+)"/i);
+                                
+                                videoDownloadUrl = (hdMatch && hdMatch[1]) || (sdMatch && sdMatch[1]) || (generalMatch && generalMatch[1]) || "";
                             }
                         } catch (e) {
-                            // Secondary fallback using RapidAPI or open scraper endpoints if needed
+                            console.error("FB Parse Error:", e);
                         }
 
-                        // If primary scraper fails, try alternative free FB api endpoint
+                        // Fallback alternative API if primary fails
                         if (!videoDownloadUrl) {
-                            const altRes = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`); // Sometimes handles universal links or fallback error handling
-                            // Keeping safe guard
+                            try {
+                                const altRes = await fetch(`https://save-fb.com/api/ajaxSearch`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                        'User-Agent': 'Mozilla/5.0'
+                                    },
+                                    body: `q=${encodeURIComponent(targetUrl)}&vt=facebook`
+                                });
+                                const altData = await altRes.json();
+                                if (altData && altData.data) {
+                                    const matchLink = altData.data.match(/href="([^"]+)"/);
+                                    if (matchLink) videoDownloadUrl = matchLink[1];
+                                }
+                            } catch (altErr) {}
                         }
                     }
 
@@ -328,7 +356,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Facebook post/video is Public.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Facebook post/video is Public and not a private group post.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
