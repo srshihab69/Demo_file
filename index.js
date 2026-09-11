@@ -38,7 +38,6 @@ const strings = {
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get file_id & Direct Link\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download\n` +
-        ` · 📸 Instagram Video/Reel → Send link for direct chat video download\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -266,8 +265,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             const lowerText = text.toLowerCase();
-            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('instagram.com') || lowerText.includes('instagr.am')) {
-                const isTikTok = lowerText.includes('tiktok');
+            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com')) {
                 let videoDownloadUrl = "";
 
                 try {
@@ -276,42 +274,27 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
-                    if (isTikTok) {
-                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                            }
-                        });
-                        const apiData = await apiRes.json();
-                        
-                        if (apiData && apiData.code === 0 && apiData.data) {
-                            videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
+                    const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                         }
-                    } else {
-                        // Instagram Video/Reel Downloader API integration
-                        const apiRes = await fetch(`https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/rapid/high/downloader.php?url=${encodeURIComponent(targetUrl)}`, {
-                            method: 'GET',
-                            headers: {
-                                'x-rapidapi-host': 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
-                                'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
-                            }
-                        });
-                        const apiData = await apiRes.json();
-                        // Extracting media URL from standard Instagram downloader endpoints
-                        videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || (apiData.media && apiData.media[0]) || "";
+                    });
+                    const apiData = await apiRes.json();
+                    
+                    if (apiData && apiData.code === 0 && apiData.data) {
+                        videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                     }
 
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
 
                     if (videoDownloadUrl) {
-                        await bot.sendMessage(chatId, `🔗 <b>Target URL:</b>\n<code>${targetUrl}</code>`, { parse_mode: 'HTML' });
                         await bot.sendVideo(chatId, videoDownloadUrl, {
                             caption: `📥 <b>Downloaded via Any ID Finder Bot</b>\n👨‍💻 Developer: @srshihab69`,
                             parse_mode: 'HTML'
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Instagram post/reel is Public.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the TikTok video is Public.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
