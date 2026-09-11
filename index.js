@@ -336,7 +336,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     mType = "🎵 Audio Detected";
                     fileTypeName = "audio";
                     mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
--                } else if (msg.voice) {
+                } else if (msg.voice) {
                     fileObj = msg.voice;
                     mType = "🎤 Voice Detected";
                     fileTypeName = "voice";
