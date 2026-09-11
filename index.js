@@ -35,7 +35,7 @@ const strings = {
         `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
-        ` · /sr69 - Trigger media via shared link\n` +
+        ` · /sr69 - Trigger media lookup via shared link\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
         ` · /ping - Check latency & status</blockquote>\n\n` +
@@ -123,14 +123,11 @@ app.get('/sr/:filename', async (req, res) => {
         `);
     }
 
-    // Redirect to telegram file or handle accordingly
     return res.redirect(mediaData.url || 'https://t.me/' + (botUsername || 'YourBotUsername'));
 });
 
 // Helper function to handle media retrieval from payload/link
-async function handleMediaPayload(chatId, payload) {
-    const mediaData = mediaStore.get(payload);
-
+async function handleMediaPayload(chatId, mediaData) {
     if (mediaData) {
         const generatorName = mediaData.user ? (mediaData.user.first_name || 'Unknown User') : 'Unknown User';
         const generatorId = mediaData.user ? mediaData.user.id : 'N/A';
@@ -190,20 +187,19 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // Check if message contains deep link payload or commands
         if (text === '/start') {
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
         else if (text.startsWith('/sr69')) {
             const parts = text.split(' ');
-            const payload = parts[1]; // e.g. sr-video-43cfy4p
+            const payload = parts[1]; // e.g. sr69_abc1234
 
-            if (payload && payload.startsWith('sr-')) {
-                await handleMediaPayload(chatId, payload);
+            if (payload && mediaStore.has(payload)) {
+                await handleMediaPayload(chatId, mediaStore.get(payload));
                 return;
             }
 
-            await bot.sendMessage(chatId, `<blockquote>❌ <b>Invalid Command Format</b></blockquote>\n\n<blockquote>Please use the correct shared link.</blockquote>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `<blockquote>❌ <b>Invalid or Expired Link</b></blockquote>\n\n<blockquote>Please use a valid shared link.</blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '/help') {
             await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
@@ -250,13 +246,27 @@ app.post(`/api/webhook`, async (req, res) => {
                 await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
+        else if (text.includes(`${hostUrl}/sr/`)) {
+            const trimmedLink = text.trim();
+            const filename = trimmedLink.split('/sr/')[1]?.split(' ')[0];
+            const mediaData = mediaStore.get(filename);
+
+            if (mediaData) {
+                await handleMediaPayload(chatId, mediaData);
+                return;
+            }
+
+            await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
+        }
         else {
             // Check if user manually pasted a deep link containing start=sr69_
             const matchParam = text.match(/[?&]start=(sr69_[a-zA-Z0-9]+)/);
             if (matchParam) {
                 const payload = matchParam[1];
-                await handleMediaPayload(chatId, payload);
-                return;
+                if (mediaStore.has(payload)) {
+                    await handleMediaPayload(chatId, mediaStore.get(payload));
+                    return;
+                }
             }
 
             let finalMessage = "";
@@ -321,25 +331,35 @@ app.post(`/api/webhook`, async (req, res) => {
 
                 if (fileObj && fileObj.file_id) {
                     mId = fileObj.file_id;
-                    const uniqueId = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
+                    const browserFilename = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
                     const payloadId = `sr69_${Math.random().toString(36).substring(2, 9)}`;
                     
+                    let teleLink = "";
                     try {
                         const fileInfo = await bot.getFile(mId);
                         if (fileInfo && fileInfo.file_path) {
-                            const teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-                            mediaStore.set(uniqueId, { type: 'media', url: teleLink, fileId: mId, fileType: fileTypeName, user: msg.from });
+                            teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
                         }
                     } catch (e) {}
 
-                    mediaStore.set(payloadId, { fileId: mId, fileType: fileTypeName, user: msg.from });
+                    const mediaObject = { 
+                        type: 'media', 
+                        url: teleLink, 
+                        fileId: mId, 
+                        fileType: fileTypeName, 
+                        user: msg.from 
+                    };
+
+                    // Store for both browser route and deep link lookup
+                    mediaStore.set(browserFilename, mediaObject);
+                    mediaStore.set(payloadId, mediaObject);
 
                     // Browser open link for direct link field
-                    browserDirectLink = `${hostUrl}/sr/${uniqueId}`;
+                    browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
 
-                    // Share deep link that triggers /sr69 payload automatically
+                    // Share link with auto /sr69 command injection via start parameter
                     const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
-                    shareDeepLink = `https://t.me/${currentBotUser}?start=sr69_${payloadId.replace('sr69_', '')}`;
+                    shareDeepLink = `https://t.me/${currentBotUser}?start=${payloadId}`;
                 }
 
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
