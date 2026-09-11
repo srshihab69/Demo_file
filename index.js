@@ -291,8 +291,22 @@ app.post(`/api/webhook`, async (req, res) => {
                 try {
                     const processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video, please wait...</b>`, { parse_mode: 'HTML' });
 
+                    // মেসেজ থেকে শুধু লিংক অংশটুকু এক্সট্রাক্ট করা (যদি সাথে এক্সট্রা টেক্সট থাকে)
+                    const words = text.split(/\s+/);
+                    let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
+
+                    // যদি টিকটকের শর্ট লিংক হয়, তবে তার আসল ইউআরএল ফেচ করা
+                    if (targetUrl.includes('vm.tiktok.com') || targetUrl.includes('vt.tiktok.com')) {
+                        try {
+                            const headRes = await fetch(targetUrl, { method: 'HEAD', redirect: 'follow' });
+                            targetUrl = headRes.url;
+                        } catch (e) {
+                            // শর্ট লিংক রিজলভ না হলে আগেরটাই রাখবে
+                        }
+                    }
+
                     if (isTikTok) {
-                        const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(text.trim())}`, {
+                        const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(targetUrl)}`, {
                             method: 'GET',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -310,7 +324,7 @@ app.post(`/api/webhook`, async (req, res) => {
                                 'x-rapidapi-host': 'facebook17.p.rapidapi.com',
                                 'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
                             },
-                            body: JSON.stringify({ url: text.trim() })
+                            body: JSON.stringify({ url: targetUrl })
                         });
                         const apiData = await apiRes.json();
                         videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
