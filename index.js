@@ -276,6 +276,21 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
+                    // Automatic link resolver for Facebook share/short URLs
+                    if (!isTikTok) {
+                        try {
+                            const headRes = await fetch(targetUrl, { method: 'HEAD', redirect: 'follow' });
+                            if (headRes.url) {
+                                targetUrl = headRes.url;
+                            }
+                        } catch (redirectErr) {
+                            try {
+                                const getRes = await fetch(targetUrl, { redirect: 'follow' });
+                                if (getRes.url) targetUrl = getRes.url;
+                            } catch (e) {}
+                        }
+                    }
+
                     if (isTikTok) {
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                             headers: {
@@ -311,7 +326,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. The link might be private or invalid.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Facebook post/video is Public.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
