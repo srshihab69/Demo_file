@@ -95,12 +95,12 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Express route for browser viewing of the media
+// Express route for browser media viewer with a view layout and download button
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
 
-    if (!mediaData) {
+    if (!mediaData || !mediaData.url) {
         return res.status(404).send(`
             <!DOCTYPE html>
             <html>
@@ -123,7 +123,47 @@ app.get('/sr/:filename', async (req, res) => {
         `);
     }
 
-    return res.redirect(mediaData.url || 'https://t.me/' + (botUsername || 'YourBotUsername'));
+    const fileType = mediaData.fileType;
+    const mediaUrl = mediaData.url;
+
+    let mediaHtml = '';
+    if (fileType === 'photo' || fileType === 'sticker' || fileType === 'gif') {
+        mediaHtml = `<img src="${mediaUrl}" alt="Media Viewer" style="max-width: 100%; max-height: 60vh; border-radius: 8px; object-fit: contain;" />`;
+    } else if (fileType === 'video') {
+        mediaHtml = `<video src="${mediaUrl}" controls autoplay style="max-width: 100%; max-height: 60vh; border-radius: 8px; outline: none;"></video>`;
+    } else if (fileType === 'audio' || fileType === 'voice') {
+        mediaHtml = `<audio src="${mediaUrl}" controls autoplay style="width: 100%; margin: 20px 0;"></audio>`;
+    } else {
+        mediaHtml = `<p style="color: #94a3b8;">Document or file ready for download.</p>`;
+    }
+
+    return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>View Media - Any ID Finder Bot</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
+                .container { text-align: center; max-width: 550px; width: 100%; background: #1e293b; padding: 20px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
+                .media-box { margin: 15px 0; display: flex; justify-content: center; align-items: center; background: #090d16; border-radius: 10px; padding: 10px; min-height: 200px; }
+                .download-btn { display: inline-block; background: #38bdf8; color: #0f172a; padding: 12px 24px; font-size: 16px; font-weight: bold; text-decoration: none; border-radius: 8px; margin-top: 15px; transition: background 0.2s; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3); }
+                .download-btn:hover { background: #0ea5e9; }
+                .footer { margin-top: 15px; font-size: 13px; color: #64748b; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h3 style="margin-top: 5px; color: #f8fafc;">✨ Media Viewer</h3>
+                <div class="media-box">
+                    ${mediaHtml}
+                </div>
+                <a href="${mediaUrl}" class="download-btn" download>📥 Download File</a>
+                <div class="footer">Powered by Any ID Finder Bot</div>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 // Helper function to handle media retrieval from payload/link
