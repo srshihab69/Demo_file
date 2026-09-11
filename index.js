@@ -5,14 +5,6 @@ const bodyParser = require('body-parser');
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token);
 
-let botUsername = process.env.BOT_USERNAME || '';
-bot.getMe().then(me => {
-    if (me && me.username) {
-        botUsername = me.username;
-        console.log(`Bot Username loaded: @${botUsername}`);
-    }
-}).catch(err => console.error("Failed to get bot username:", err));
-
 const app = express();
 app.use(bodyParser.json());
 
@@ -35,6 +27,7 @@ const strings = {
         `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
+        ` · /sr69 - Trigger media lookup via shared link\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
         ` · /ping - Check latency & status</blockquote>\n\n` +
@@ -44,7 +37,7 @@ const strings = {
         ` · ☎️ Support - Contact developer</blockquote>\n\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
-        ` · 📷 Send Photo/Video → Get file_id & Share Deep Link\n` +
+        ` · 📷 Send Photo/Video → Get Web Browser Direct Link & Bot Deep Link\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
@@ -94,7 +87,38 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Helper function to handle media retrieval from payload/link
+// Express route for browser viewing of the media
+app.get('/sr/:filename', async (req, res) => {
+    const filename = req.params.filename;
+    const mediaData = mediaStore.get(filename);
+
+    if (!mediaData) {
+        return res.status(404).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Link Expired - Any ID Finder Bot</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+                    p { color: #94a3b8; font-size: 15px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h3>❌ Link Expired or Not Found</h3>
+                    <p>This media link has expired or is invalid. Please send the link/media to the bot again to get a fresh link.</p>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+
+    return res.redirect(mediaData.url);
+});
+
+// Helper function to send media via payload
 async function handleMediaPayload(chatId, payload) {
     const mediaData = mediaStore.get(payload);
 
@@ -155,18 +179,20 @@ app.post(`/api/webhook`, async (req, res) => {
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
+        const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // Check if message contains deep link payload or starts with /start
-        if (text.startsWith('/start')) {
+        if (text === '/start') {
+            await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+        }
+        else if (text === '/sr69' || text.startsWith('/sr69 ')) {
             const parts = text.split(' ');
-            const payload = parts[1]; // e.g. sr-video-43cfy4p
-
-            if (payload && payload.startsWith('sr-')) {
+            const payload = parts[1];
+            if (payload) {
                 await handleMediaPayload(chatId, payload);
                 return;
+            } else {
+                await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>Please provide a valid payload or use the correct deep link.</blockquote>`, { parse_mode: 'HTML' });
             }
-
-            await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
         else if (text === '/help') {
             await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
@@ -213,8 +239,40 @@ app.post(`/api/webhook`, async (req, res) => {
                 await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
+        else if (text.includes(`${hostUrl}/sr/`)) {
+            const trimmedLink = text.trim();
+            const filename = trimmedLink.split('/sr/')[1];
+            const mediaData = mediaStore.get(filename);
+
+            if (mediaData) {
+                const generatorName = mediaData.user ? (mediaData.user.first_name || 'Unknown User') : 'Unknown User';
+                const generatorId = mediaData.user ? mediaData.user.id : 'N/A';
+                const generatorUsername = mediaData.user && mediaData.user.username ? `@${mediaData.user.username}` : 'No Username';
+                const userLinkHtml = mediaData.user && mediaData.user.username ? `<a href="t.me/${mediaData.user.username}">${generatorName}</a>` : `<code>${generatorName}</code>`;
+
+                const headerText = `<blockquote>👤 <b>Generated By:</b> ${userLinkHtml}\n🆔 ID: <code>${generatorId}</code>\n🏷️ Username: ${generatorUsername}</blockquote>\n\n`;
+
+                if (mediaData.fileType === 'photo' && mediaData.fileId) {
+                    await bot.sendPhoto(chatId, mediaData.fileId, {
+                        caption: headerText + `✨ <b>Here is your requested photo!</b>`,
+                        parse_mode: 'HTML'
+                    });
+                    return;
+                } else if (mediaData.fileType === 'video' && mediaData.fileId) {
+                    await bot.sendVideo(chatId, mediaData.fileId, {
+                        caption: headerText + `✨ <b>Here is your requested video!</b>`,
+                        parse_mode: 'HTML'
+                    });
+                    return;
+                }
+            }
+
+            await bot.sendMessage(chatId, `<blockquote>ℹ️ <b>Direct Media Link</b></blockquote>\n\n<blockquote>You sent your own generated link, but the data might have expired.</blockquote>`, {
+                parse_mode: 'HTML'
+            });
+        }
         else {
-            // Check if user manually pasted a deep link containing start=sr-
+            // Check if user pasted a deep link containing /sr69 payload
             const matchParam = text.match(/[?&]start=(sr-[a-zA-Z0-9]+)/);
             if (matchParam) {
                 const payload = matchParam[1];
@@ -239,7 +297,8 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             let mId = "", mType = "", mExtra = "";
-            let customDirectLink = "";
+            let browserDirectLink = "";
+            let botDeepLinkShareText = "";
 
             if (msg.photo || msg.video || msg.animation || msg.document || msg.audio || msg.voice) {
                 let fileObj = null;
@@ -283,23 +342,38 @@ app.post(`/api/webhook`, async (req, res) => {
 
                 if (fileObj && fileObj.file_id) {
                     mId = fileObj.file_id;
-                    const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
-                    
-                    mediaStore.set(uniqueName, { 
-                        fileId: mId, 
-                        fileType: fileTypeName, 
-                        user: msg.from 
-                    });
-                    
-                    const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
-                    customDirectLink = `https://t.me/${currentBotUser}?start=${uniqueName}`;
+                    try {
+                        const fileInfo = await bot.getFile(mId);
+                        if (fileInfo && fileInfo.file_path) {
+                            const teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+                            const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
+                            
+                            mediaStore.set(uniqueName, { 
+                                type: 'media', 
+                                url: teleLink, 
+                                fileId: mId, 
+                                fileType: fileTypeName, 
+                                user: msg.from 
+                            });
+                            
+                            // Browser open link for direct link field
+                            browserDirectLink = `${hostUrl}/sr/${uniqueName}`;
+
+                            // Deep link for sharing which triggers /sr69
+                            const me = await bot.getMe();
+                            const botUsername = me.username || 'YourBotUsername';
+                            botDeepLinkShareText = `https://t.me/${botUsername}?start=${uniqueName}`;
+                        }
+                    } catch (err) {
+                        browserDirectLink = 'N/A';
+                    }
                 }
 
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <code>${customDirectLink}</code></blockquote>\n\n`;
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <code>${browserDirectLink}</code></blockquote>\n\n`;
                 
-                if (customDirectLink) {
-                    inlineButtons.push([{ text: '📤 Share Link', switch_inline_query: customDirectLink }]);
+                if (botDeepLinkShareText) {
+                    inlineButtons.push([{ text: '📤 Share Link', switch_inline_query: botDeepLinkShareText }]);
                 }
             }
 
@@ -404,4 +478,4 @@ app.post(`/api/webhook`, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Any ID Finder Bot Active on Port ${PORT}`));
+app.listen(PORT, () => console.log(`Any ID Finder Bot Active on Port `${PORT}`));
