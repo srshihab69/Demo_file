@@ -98,9 +98,32 @@ app.get('/sr/:filename', async (req, res) => {
         return res.status(404).send('<h3>File not found or link expired!</h3>');
     }
 
-    // If it's a social media link, redirect or display frame/player
-    if (fileUrl.startsWith('http') && (fileUrl.includes('tiktok.com') || fileUrl.includes('facebook.com') || fileUrl.includes('fb.watch'))) {
-        return res.redirect(fileUrl);
+    // If it's a social media link, show a clean preview page instead of direct app redirect
+    const isSocial = fileUrl.startsWith('http') && (fileUrl.includes('tiktok.com') || fileUrl.includes('facebook.com') || fileUrl.includes('fb.watch'));
+    if (isSocial) {
+        return res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Social Media Link - Any ID Finder Bot</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+                    a.btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 15px; transition: background 0.2s; }
+                    a.btn:hover { background: #2563eb; }
+                    p { word-break: break-all; color: #94a3b8; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h3>🎥 Social Media Link</h3>
+                    <p>${fileUrl}</p>
+                    <a href="${fileUrl}" class="btn" target="_blank">📥 Open Link</a>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
     const isVideo = filename.includes('video') || filename.endsWith('.mp4');
@@ -124,7 +147,7 @@ app.get('/sr/:filename', async (req, res) => {
                 <h3>Media Viewer</h3>
                 ${isVideo ? `<video controls autoplay src="${fileUrl}"></video>` : `<img src="${fileUrl}" alt="Media">`}
                 <br>
-                <a href="${fileUrl}" class="btn" download>📥 Download (No Watermark)</a>
+                <a href="${fileUrl}" class="btn" download>📥 Download</a>
             </div>
         </body>
         </html>
@@ -278,7 +301,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
 
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <a href="${customDirectLink}">Copy Link</a></blockquote>\n\n`;
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <code>${customDirectLink}</code></blockquote>\n\n`;
                 
                 if (customDirectLink && customDirectLink !== 'N/A') {
                     inlineButtons.push([{ text: '📥 Download', url: customDirectLink }]);
@@ -296,9 +319,9 @@ app.post(`/api/webhook`, async (req, res) => {
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
-                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\nDirect Link : <a href="${socialDirectLink}">Copy Link</a></blockquote>\n\n`;
+                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\nDirect Link : <code>${socialDirectLink}</code></blockquote>\n\n`;
 
-                inlineButtons.push([{ text: '📥 Download (No Watermark)', url: socialDirectLink }]);
+                inlineButtons.push([{ text: '📥 Open / Download', url: socialDirectLink }]);
             }
 
             // D: Custom Emoji
