@@ -324,6 +324,9 @@ app.post(`/api/webhook`, async (req, res) => {
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
 
                     if (videoDownloadUrl) {
+                        // Send resolved URL first, then send the video
+                        await bot.sendMessage(chatId, `🔗 <b>Resolved URL:</b>\n<code>${targetUrl}</code>`, { parse_mode: 'HTML' });
+
                         await bot.sendVideo(chatId, videoDownloadUrl, {
                             caption: `📥 <b>Downloaded via Any ID Finder Bot</b>\n👨‍💻 Developer: @srshihab69`,
                             parse_mode: 'HTML'
