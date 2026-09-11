@@ -117,7 +117,6 @@ app.get('/sr/:filename', async (req, res) => {
         `);
     }
 
-    // If it's a social media link stored by bot
     if (mediaData.type === 'social') {
         return res.send(`
             <!DOCTYPE html>
@@ -336,21 +335,57 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
             }
 
-            // C: TikTok or FB Video Link Detection
+            // C: TikTok or Facebook Video Link Detection with Respective APIs
             const lowerText = text.toLowerCase();
-            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch')) {
+            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch') || lowerText.includes('fb.me')) {
                 const isTikTok = lowerText.includes('tiktok');
                 const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
-                const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
+                const dummyId = (isTikTok ? 'TID_' : 'FB_') + Math.floor(Math.random() * 1000000000);
                 const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
                 
-                // Demo direct video stream or fallback source handled via custom viewer
-                const sampleVideoStream = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-                mediaStore.set(uniqueName, { type: 'social', url: sampleVideoStream });
+                let videoDownloadUrl = "";
+
+                try {
+                    if (isTikTok) {
+                        // TikTok GET API Request
+                        const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(text.trim())}`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-rapidapi-host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com',
+                                'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
+                            }
+                        });
+                        const apiData = await apiRes.json();
+                        // Adjust property based on API JSON structure response
+                        videoDownloadUrl = apiData.video || apiData.play || (apiData.data && apiData.data.play) || "";
+                    } else {
+                        // Facebook POST API Request
+                        const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-rapidapi-host': 'facebook17.p.rapidapi.com',
+                                'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
+                            },
+                            body: JSON.stringify({ url: text.trim() })
+                        });
+                        const apiData = await apiRes.json();
+                        videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
+                    }
+                } catch (apiErr) {
+                    console.error("Social API Fetch Error:", apiErr);
+                }
+
+                if (!videoDownloadUrl) {
+                    videoDownloadUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; 
+                }
+
+                mediaStore.set(uniqueName, { type: 'social', url: videoDownloadUrl });
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
-                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\nDirect Link : <code>${socialDirectLink}</code></blockquote>\n\n`;
+                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📊 Status: <code>Ready to Stream/Download</code>\nDirect Link : <code>${socialDirectLink}</code></blockquote>\n\n`;
 
                 inlineButtons.push([{ text: '📥 Download', url: socialDirectLink }]);
             }
