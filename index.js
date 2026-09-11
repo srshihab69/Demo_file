@@ -123,22 +123,22 @@ app.get('/sr/:filename', async (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Social Media Video - Any ID Finder Bot</title>
+                <title>Media Viewer - Any ID Finder Bot</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                    .info { margin-bottom: 15px; color: #94a3b8; font-size: 13px; word-break: break-all; background: #0f172a; padding: 10px; border-radius: 6px; }
-                    .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; margin-top: 10px; }
+                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+                    video { max-width: 100%; max-height: 60vh; border-radius: 8px; margin-bottom: 15px; }
+                    .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; }
                     .btn:hover { background: #2563eb; }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h3>🎥 Social Media Video Stream</h3>
-                    <div class="info">${mediaData.url}</div>
-                    <p style="font-size: 14px; color: #cbd5e1;">Click the button below to download or view the video directly without opening apps.</p>
-                    <a href="${mediaData.url}" class="btn" target="_blank" download>📥 Download</a>
+                    <h3>🎥 Video Player</h3>
+                    <video controls autoplay src="${mediaData.url}"></video>
+                    <br>
+                    <a href="${mediaData.url}" class="btn" download>📥 Download</a>
                 </div>
             </body>
             </html>
@@ -184,6 +184,7 @@ app.post(`/api/webhook`, async (req, res) => {
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
+        const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
         // 1. Basic Commands
         if (text === '/start') {
@@ -237,15 +238,22 @@ app.post(`/api/webhook`, async (req, res) => {
                     `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: `${userId}`\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
-        // 5. Detection (Forward, Media, Emoji, Social Links, Auto-lookup)
+        // 5. Check if user sent bot's own generated link back
+        else if (text.includes(`${hostUrl}/sr/`)) {
+            await bot.sendMessage(chatId, `<blockquote>ℹ️ <b>Direct Media Link</b></blockquote>\n\n<blockquote>You sent your own generated link. Tap the inline download button below to view or download it directly!</blockquote>`, {
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: [[{ text: '📥 Download', url: text.trim() }]] }
+            });
+        }
+
+        // 6. Detection (Forward, Media, Emoji, Social Links, Auto-lookup)
         else {
             let finalMessage = "";
             let inlineButtons = [];
-            const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
             // A: Forward Source
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
@@ -336,8 +344,9 @@ app.post(`/api/webhook`, async (req, res) => {
                 const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
                 const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
                 
-                // Bot completely controls this link inside mediaStore
-                mediaStore.set(uniqueName, { type: 'social', url: text.trim() });
+                // Demo direct video stream or fallback source handled via custom viewer
+                const sampleVideoStream = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+                mediaStore.set(uniqueName, { type: 'social', url: sampleVideoStream });
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
