@@ -276,25 +276,6 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
-                    // Automatic Facebook Short Link Resolver using standard GET request with User-Agent
-                    if (!isTikTok) {
-                        try {
-                            const resolveRes = await fetch(targetUrl, {
-                                method: 'GET',
-                                redirect: 'follow',
-                                headers: {
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-                                }
-                            });
-                            if (resolveRes.url) {
-                                targetUrl = resolveRes.url;
-                            }
-                        } catch (redirectErr) {
-                            console.error("Link resolution error:", redirectErr);
-                        }
-                    }
-
                     if (isTikTok) {
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                             headers: {
@@ -307,26 +288,22 @@ app.post(`/api/webhook`, async (req, res) => {
                             videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                         }
                     } else {
-                        // RapidAPI integration for Facebook
-                        const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
-                            method: 'POST',
+                        // Updated Autolink API endpoint to handle Facebook short links directly
+                        const apiRes = await fetch(`https://alldl.p.rapidapi.com/v1/social/autolink?url=${encodeURIComponent(targetUrl)}`, {
+                            method: 'GET',
                             headers: {
-                                'Content-Type': 'application/json',
-                                'x-rapidapi-host': 'facebook17.p.rapidapi.com',
+                                'x-rapidapi-host': 'alldl.p.rapidapi.com',
                                 'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
-                            },
-                            body: JSON.stringify({ url: targetUrl })
+                            }
                         });
                         const apiData = await apiRes.json();
-                        videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
+                        videoDownloadUrl = apiData.data?.videoUrl || apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
                     }
 
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
 
                     if (videoDownloadUrl) {
-                        // Send resolved URL first, then send the video
-                        await bot.sendMessage(chatId, `🔗 <b>Resolved URL:</b>\n<code>${targetUrl}</code>`, { parse_mode: 'HTML' });
-
+                        await bot.sendMessage(chatId, `🔗 <b>Target URL:</b>\n<code>${targetUrl}</code>`, { parse_mode: 'HTML' });
                         await bot.sendVideo(chatId, videoDownloadUrl, {
                             caption: `📥 <b>Downloaded via Any ID Finder Bot</b>\n👨‍💻 Developer: @srshihab69`,
                             parse_mode: 'HTML'
