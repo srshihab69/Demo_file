@@ -64,7 +64,7 @@ const strings = {
         `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
 
     ping: (lat) => 
-        `<blockquote>🏓 <b>Pong!</b></blockquote>\n\n` +
+        `<blockquote>♻️ <b>Correct latency & status-</b></blockquote>\n\n` +
         `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
         `🕒 Uptime: <b>Always Active</b>\n` +
         `🤖 Status: <b>Online</b></blockquote>`,
