@@ -95,30 +95,49 @@ app.get('/sr/:filename', async (req, res) => {
     const mediaData = mediaStore.get(filename);
 
     if (!mediaData) {
-        return res.status(404).send('<h3>File not found or link expired!</h3>');
+        return res.status(404).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Link Expired - Any ID Finder Bot</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+                    p { color: #94a3b8; font-size: 15px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h3>❌ Link Expired or Not Found</h3>
+                    <p>This media link has expired or is invalid. Please send the link/media to the bot again to get a fresh link.</p>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
-    // If it's a social media link, render a fully controlled custom video/media player page
+    // If it's a social media link stored by bot
     if (mediaData.type === 'social') {
         return res.send(`
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Media Viewer - Any ID Finder Bot</title>
+                <title>Social Media Video - Any ID Finder Bot</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                     .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                    .info { margin-bottom: 15px; color: #94a3b8; font-size: 14px; word-break: break-all; }
+                    .info { margin-bottom: 15px; color: #94a3b8; font-size: 13px; word-break: break-all; background: #0f172a; padding: 10px; border-radius: 6px; }
                     .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; margin-top: 10px; }
                     .btn:hover { background: #2563eb; }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h3>🎥 Social Media Video</h3>
-                    <div class="info">Source: ${mediaData.url}</div>
-                    <p style="font-size: 13px; color: #cbd5e1;">Click below to download or view the content directly via our partner downloader stream.</p>
+                    <h3>🎥 Social Media Video Stream</h3>
+                    <div class="info">${mediaData.url}</div>
+                    <p style="font-size: 14px; color: #cbd5e1;">Click the button below to download or view the video directly without opening apps.</p>
                     <a href="${mediaData.url}" class="btn" target="_blank" download>📥 Download</a>
                 </div>
             </body>
@@ -218,7 +237,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: `${userId}`\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
@@ -317,7 +336,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
                 const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
                 
-                // Bot stores the link under its complete control via custom view route
+                // Bot completely controls this link inside mediaStore
                 mediaStore.set(uniqueName, { type: 'social', url: text.trim() });
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
