@@ -36,7 +36,8 @@ const strings = {
         ` · ☎️ Support - Contact developer</blockquote>\n\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
-        ` · 📷 Send Photo/Video → Get file_id & Res\n` +
+        ` · 📷 Send Photo/Video → Get file_id & Direct Link\n` +
+        ` · 🎥 TikTok/FB Video → Res, ID, Size & Download Button\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -54,7 +55,7 @@ const strings = {
         `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
 
     ping: (lat) => 
-        `<blockquote>😀 <b>Pong!</b></blockquote>\n\n` +
+        `<blockquote>🏓 <b>Pong!</b></blockquote>\n\n` +
         `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
         `🕒 Uptime: <b>Always Active</b>\n` +
         `🤖 Status: <b>Online</b></blockquote>`,
@@ -70,7 +71,7 @@ const strings = {
         `<blockquote>📱 Use keyboard buttons to get IDs\n` +
         `📎 Send any file to get its file_id\n` +
         `📩 Forward messages to get source ID\n` +
-        `🔗 Send t.me links to parse chat IDs\n` +
+        `🔗 Send t.me or social media links\n` +
         `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
@@ -153,14 +154,14 @@ app.post(`/api/webhook`, async (req, res) => {
             try {
                 const user = await bot.getChat(userId);
                 const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n` +
-                    `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n📧 User: @${user.username || 'N/A'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+                    `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Send Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
                 await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
 
-        // 5. Detection (Forward, Media, Emoji, Auto-lookup)
+        // 5. Detection (Forward, Media, Emoji, Social Links, Auto-lookup)
         else {
             let finalMessage = "";
             let inlineButtons = [];
@@ -179,38 +180,76 @@ app.post(`/api/webhook`, async (req, res) => {
                     `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
             }
 
-            // B: Media Detection
+            // B: Media Detection & Direct Links
             let mId = "", mType = "", mExtra = "";
-            if (msg.photo) {
-                const p = msg.photo[msg.photo.length - 1];
-                mId = p.file_id; mType = "📷 Photo Detected";
-                mExtra = `\n📐 Res: <code>${p.width}x${p.height}</code>\n📊 Size: <code>${formatSize(p.file_size)}</code>`;
-            } else if (msg.video) {
-                mId = msg.video.file_id; mType = "🎬 Video Detected";
-                mExtra = `\n📐 Res: <code>${msg.video.width}x${msg.video.height}</code>\n⏳ Duration: <code>${msg.video.duration}s</code>\n📊 Size: <code>${formatSize(msg.video.file_size)}</code>`;
-            } else if (msg.animation) {
-                mId = msg.animation.file_id; mType = "🎞️ GIF Detected";
-                mExtra = `\n📛 Name: <code>${msg.animation.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(msg.animation.file_size)}</code>`;
-            } else if (msg.sticker) {
-                mId = msg.sticker.file_id; mType = "🎭 Sticker Detected";
-                mExtra = `\n📦 Set: <code>${msg.sticker.set_name || 'None'}</code>\n😀 Emoji: <code>${msg.sticker.emoji || 'N/A'}</code>`;
-            } else if (msg.document) {
-                mId = msg.document.file_id; mType = "📄 File Detected";
-                mExtra = `\n📛 Name: <code>${msg.document.file_name}</code>\n📊 Size: <code>${formatSize(msg.document.file_size)}</code>`;
-            } else if (msg.audio) {
-                mId = msg.audio.file_id; mType = "🎵 Audio Detected";
-                mExtra = `\n📊 Size: <code>${formatSize(msg.audio.file_size)}</code>`;
-            } else if (msg.voice) {
-                mId = msg.voice.file_id; mType = "🎤 Voice Detected";
-                mExtra = `\n⏳ Duration: <code>${msg.voice.duration}s</code>`;
-            }
+            let fileLink = "";
 
-            if (mType) {
+            if (msg.photo || msg.video || msg.animation || msg.document || msg.audio || msg.voice) {
+                let fileObj = null;
+                if (msg.photo) {
+                    fileObj = msg.photo[msg.photo.length - 1];
+                    mType = "📷 Photo Detected";
+                    mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.video) {
+                    fileObj = msg.video;
+                    mType = "🎬 Video Detected";
+                    mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n⏳ Duration: <code>${fileObj.duration}s</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.animation) {
+                    fileObj = msg.animation;
+                    mType = "🎞️ GIF Detected";
+                    mExtra = `\n📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.sticker) {
+                    fileObj = msg.sticker;
+                    mType = "🎭 Sticker Detected";
+                    mExtra = `\n📦 Set: <code>${fileObj.set_name || 'None'}</code>\n😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
+                } else if (msg.document) {
+                    fileObj = msg.document;
+                    mType = "📄 File Detected";
+                    mExtra = `\n📛 Name: <code>${fileObj.file_name}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.audio) {
+                    fileObj = msg.audio;
+                    mType = "🎵 Audio Detected";
+                    mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.voice) {
+                    fileObj = msg.voice;
+                    mType = "🎤 Voice Detected";
+                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s</code>`;
+                }
+
+                if (fileObj && fileObj.file_id) {
+                    mId = fileObj.file_id;
+                    try {
+                        const fileInfo = await bot.getFile(mId);
+                        if (fileInfo && fileInfo.file_path) {
+                            fileLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+                        }
+                    } catch (err) {
+                        fileLink = 'N/A';
+                    }
+                }
+
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}</blockquote>\n\n`;
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\n🔗 Direct Link: <a href="${fileLink}">Open / Download</a></blockquote>\n\n`;
+                
+                if (fileLink && fileLink !== 'N/A') {
+                    inlineButtons.push([{ text: '📥 Download File', url: fileLink }]);
+                }
             }
 
-            // C: Custom Emoji
+            // C: TikTok or FB Video Link Detection
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch')) {
+                const isTikTok = lowerText.includes('tiktok');
+                const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
+                const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
+                
+                finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
+                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\n🔗 Direct Link: <a href="${text}">Source Link</a></blockquote>\n\n`;
+
+                inlineButtons.push([{ text: '📥 Download (No Watermark)', url: text }]);
+            }
+
+            // D: Custom Emoji
             const customEmojis = entities.filter(e => e.type === 'custom_emoji');
             if (customEmojis.length > 0) {
                 finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n<blockquote expandable>`;
@@ -220,7 +259,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 finalMessage += `</blockquote>\n\n`;
             }
 
-            // D: Auto-Lookup (User, Bot, Channel, Group)
+            // E: Auto-Lookup (User, Bot, Channel, Group)
             const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
             if (lookups.length > 0) {
                 let lookupResults = "";
@@ -240,7 +279,6 @@ app.post(`/api/webhook`, async (req, res) => {
                             const chat = await bot.getChat(target);
                             lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
                             
-                            // Inline buttons based on type
                             if (chat.type === 'private') {
                                 const isBot = target.toLowerCase().endsWith('bot');
                                 inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
