@@ -276,7 +276,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
-                    // Automatic link resolver for Facebook share/short URLs with proper User-Agent
+                    // Automatic Facebook Short Link Resolver using standard GET request with User-Agent
                     if (!isTikTok) {
                         try {
                             const resolveRes = await fetch(targetUrl, {
@@ -287,7 +287,7 @@ app.post(`/api/webhook`, async (req, res) => {
                                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
                                 }
                             });
-                            if (resolveRes.url && !resolveRes.url.includes('/share/')) {
+                            if (resolveRes.url) {
                                 targetUrl = resolveRes.url;
                             }
                         } catch (redirectErr) {
