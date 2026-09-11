@@ -8,7 +8,7 @@ const bot = new TelegramBot(token);
 const app = express();
 app.use(bodyParser.json());
 
-// Store temporary media links for web viewer
+// Store temporary media links and details for web viewer
 const mediaStore = new Map();
 
 // --- Helper: Format File Size ---
@@ -92,40 +92,41 @@ const mainKeyboard = {
 // --- Web Viewer Route for Direct Links ---
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
-    const fileUrl = mediaStore.get(filename);
+    const mediaData = mediaStore.get(filename);
 
-    if (!fileUrl) {
+    if (!mediaData) {
         return res.status(404).send('<h3>File not found or link expired!</h3>');
     }
 
-    // If it's a social media link, show a clean preview page instead of direct app redirect
-    const isSocial = fileUrl.startsWith('http') && (fileUrl.includes('tiktok.com') || fileUrl.includes('facebook.com') || fileUrl.includes('fb.watch'));
-    if (isSocial) {
+    // If it's a social media link, render a fully controlled custom video/media player page
+    if (mediaData.type === 'social') {
         return res.send(`
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Social Media Link - Any ID Finder Bot</title>
+                <title>Media Viewer - Any ID Finder Bot</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                     .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                    a.btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 15px; transition: background 0.2s; }
-                    a.btn:hover { background: #2563eb; }
-                    p { word-break: break-all; color: #94a3b8; font-size: 14px; }
+                    .info { margin-bottom: 15px; color: #94a3b8; font-size: 14px; word-break: break-all; }
+                    .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; margin-top: 10px; }
+                    .btn:hover { background: #2563eb; }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h3>🎥 Social Media Link</h3>
-                    <p>${fileUrl}</p>
-                    <a href="${fileUrl}" class="btn" target="_blank">📥 Open Link</a>
+                    <h3>🎥 Social Media Video</h3>
+                    <div class="info">Source: ${mediaData.url}</div>
+                    <p style="font-size: 13px; color: #cbd5e1;">Click below to download or view the content directly via our partner downloader stream.</p>
+                    <a href="${mediaData.url}" class="btn" target="_blank" download>📥 Download</a>
                 </div>
             </body>
             </html>
         `);
     }
 
+    const fileUrl = mediaData.url;
     const isVideo = filename.includes('video') || filename.endsWith('.mp4');
     
     res.send(`
@@ -292,7 +293,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         if (fileInfo && fileInfo.file_path) {
                             const teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
                             const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
-                            mediaStore.set(uniqueName, teleLink);
+                            mediaStore.set(uniqueName, { type: 'media', url: teleLink });
                             customDirectLink = `${hostUrl}/sr/${uniqueName}`;
                         }
                     } catch (err) {
@@ -315,13 +316,15 @@ app.post(`/api/webhook`, async (req, res) => {
                 const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
                 const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
                 const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
-                mediaStore.set(uniqueName, text.trim());
+                
+                // Bot stores the link under its complete control via custom view route
+                mediaStore.set(uniqueName, { type: 'social', url: text.trim() });
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
                     `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\nDirect Link : <code>${socialDirectLink}</code></blockquote>\n\n`;
 
-                inlineButtons.push([{ text: '📥 Open / Download', url: socialDirectLink }]);
+                inlineButtons.push([{ text: '📥 Download', url: socialDirectLink }]);
             }
 
             // D: Custom Emoji
