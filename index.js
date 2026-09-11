@@ -40,7 +40,7 @@ const strings = {
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get file_id & Direct Link\n` +
-        ` · 🎥 TikTok/FB Video → Res, ID, Size & Download Button\n` +
+        ` · 🎥 TikTok/FB Video → Direct Video Send in Chat\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -89,7 +89,7 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// --- Web Viewer Route for Direct Links ---
+// --- Web Viewer Route for Direct Links (Other Files) ---
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
@@ -117,60 +117,7 @@ app.get('/sr/:filename', async (req, res) => {
         `);
     }
 
-    if (mediaData.type === 'social') {
-        return res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Media Viewer - Any ID Finder Bot</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                    video { max-width: 100%; max-height: 60vh; border-radius: 8px; margin-bottom: 15px; }
-                    .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; }
-                    .btn:hover { background: #2563eb; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h3>🎥 Video Player</h3>
-                    <video controls autoplay src="${mediaData.url}"></video>
-                    <br>
-                    <a href="${mediaData.url}" class="btn" download>📥 Download</a>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-
-    const fileUrl = mediaData.url;
-    const isVideo = filename.includes('video') || filename.endsWith('.mp4');
-    
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Download Media - Any ID Finder Bot</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                img, video { max-width: 100%; max-height: 60vh; border-radius: 8px; margin-bottom: 15px; }
-                .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; }
-                .btn:hover { background: #2563eb; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h3>Media Viewer</h3>
-                ${isVideo ? `<video controls autoplay src="${fileUrl}"></video>` : `<img src="${fileUrl}" alt="Media">`}
-                <br>
-                <a href="${fileUrl}" class="btn" download>📥 Download</a>
-            </div>
-        </body>
-        </html>
-    `);
+    return res.redirect(mediaData.url);
 });
 
 // --- Webhook Handling ---
@@ -335,19 +282,16 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
             }
 
-            // C: TikTok or Facebook Video Link Detection with Respective APIs
+            // C: TikTok or Facebook Video Link Detection & Direct Send in Chat
             const lowerText = text.toLowerCase();
             if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch') || lowerText.includes('fb.me')) {
                 const isTikTok = lowerText.includes('tiktok');
-                const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
-                const dummyId = (isTikTok ? 'TID_' : 'FB_') + Math.floor(Math.random() * 1000000000);
-                const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
-                
                 let videoDownloadUrl = "";
 
                 try {
+                    const processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video, please wait...</b>`, { parse_mode: 'HTML' });
+
                     if (isTikTok) {
-                        // TikTok GET API Request
                         const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(text.trim())}`, {
                             method: 'GET',
                             headers: {
@@ -357,10 +301,8 @@ app.post(`/api/webhook`, async (req, res) => {
                             }
                         });
                         const apiData = await apiRes.json();
-                        // Adjust property based on API JSON structure response
                         videoDownloadUrl = apiData.video || apiData.play || (apiData.data && apiData.data.play) || "";
                     } else {
-                        // Facebook POST API Request
                         const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
                             method: 'POST',
                             headers: {
@@ -373,21 +315,24 @@ app.post(`/api/webhook`, async (req, res) => {
                         const apiData = await apiRes.json();
                         videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
                     }
+
+                    await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+
+                    if (videoDownloadUrl) {
+                        await bot.sendVideo(chatId, videoDownloadUrl, {
+                            caption: `📥 <b>Downloaded via Any ID Finder Bot</b>\n👨‍💻 Developer: @srshihab69`,
+                            parse_mode: 'HTML'
+                        });
+                        return;
+                    } else {
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Try another link.</b>`, { parse_mode: 'HTML' });
+                        return;
+                    }
                 } catch (apiErr) {
-                    console.error("Social API Fetch Error:", apiErr);
+                    console.error("Social Video Send Error:", apiErr);
+                    await bot.sendMessage(chatId, `❌ <b>An error occurred while processing the video.</b>`, { parse_mode: 'HTML' });
+                    return;
                 }
-
-                if (!videoDownloadUrl) {
-                    videoDownloadUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; 
-                }
-
-                mediaStore.set(uniqueName, { type: 'social', url: videoDownloadUrl });
-                const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
-                
-                finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
-                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📊 Status: <code>Ready to Stream/Download</code>\nDirect Link : <code>${socialDirectLink}</code></blockquote>\n\n`;
-
-                inlineButtons.push([{ text: '📥 Download', url: socialDirectLink }]);
             }
 
             // D: Custom Emoji
