@@ -262,7 +262,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     fileObj = msg.voice;
                     mType = "🎤 Voice Detected";
                     fileTypeName = "voice";
-                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s}</code>`;
+                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s</code>`;
                 }
 
                 if (fileObj && fileObj.file_id) {
@@ -271,7 +271,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         const fileInfo = await bot.getFile(mId);
                         if (fileInfo && fileInfo.file_path) {
                             const teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-                            const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36.substring(2, 9))}`;
+                            const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
                             mediaStore.set(uniqueName, teleLink);
                             customDirectLink = `${hostUrl}/sr/${uniqueName}`;
                         }
