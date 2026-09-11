@@ -98,6 +98,11 @@ app.get('/sr/:filename', async (req, res) => {
         return res.status(404).send('<h3>File not found or link expired!</h3>');
     }
 
+    // If it's a social media link, redirect or display frame/player
+    if (fileUrl.startsWith('http') && (fileUrl.includes('tiktok.com') || fileUrl.includes('facebook.com') || fileUrl.includes('fb.watch'))) {
+        return res.redirect(fileUrl);
+    }
+
     const isVideo = filename.includes('video') || filename.endsWith('.mp4');
     
     res.send(`
@@ -136,26 +141,21 @@ app.post(`/api/webhook`, async (req, res) => {
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
-        let isProcessed = false;
 
         // 1. Basic Commands
         if (text === '/start') {
-            isProcessed = true;
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
         else if (text === '/help') {
-            isProcessed = true;
             await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
         }
         else if (text === '/ping') {
-            isProcessed = true;
             const latency = Math.floor(Math.random() * 10) + 40;
             await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
 
         // 2. /id Command
         else if (text.startsWith('/id')) {
-            isProcessed = true;
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
@@ -175,13 +175,11 @@ app.post(`/api/webhook`, async (req, res) => {
 
         // 3. Static Buttons
         else if (text === '🆔 My Info') {
-            isProcessed = true;
             const u = msg.from;
             await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
                 `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '☎️ Support') {
-            isProcessed = true;
             await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n\n` +
                 `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
                 ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
@@ -189,7 +187,6 @@ app.post(`/api/webhook`, async (req, res) => {
 
         // 4. User Shared via Keyboard
         else if (msg.user_shared) {
-            isProcessed = true;
             const userId = msg.user_shared.user_id;
             try {
                 const user = await bot.getChat(userId);
@@ -295,7 +292,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
                 const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
                 const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
-                mediaStore.set(uniqueName, text);
+                mediaStore.set(uniqueName, text.trim());
                 const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
@@ -350,7 +347,6 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             if (finalMessage) {
-                isProcessed = true;
                 await bot.sendMessage(chatId, finalMessage, { 
                     parse_mode: 'HTML', 
                     reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
