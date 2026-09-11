@@ -38,7 +38,7 @@ const strings = {
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get file_id & Direct Link\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download\n` +
-        ` · 📘 Facebook Video → Send link for direct chat video download\n` +
+        ` · 📸 Instagram Video/Reel → Send link for direct chat video download\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -266,7 +266,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             const lowerText = text.toLowerCase();
-            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch') || lowerText.includes('fb.me')) {
+            if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('instagram.com') || lowerText.includes('instagr.am')) {
                 const isTikTok = lowerText.includes('tiktok');
                 let videoDownloadUrl = "";
 
@@ -288,16 +288,17 @@ app.post(`/api/webhook`, async (req, res) => {
                             videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                         }
                     } else {
-                        // Updated Autolink API endpoint to handle Facebook short links directly
-                        const apiRes = await fetch(`https://alldl.p.rapidapi.com/v1/social/autolink?url=${encodeURIComponent(targetUrl)}`, {
+                        // Instagram Video/Reel Downloader API integration
+                        const apiRes = await fetch(`https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/rapid/high/downloader.php?url=${encodeURIComponent(targetUrl)}`, {
                             method: 'GET',
                             headers: {
-                                'x-rapidapi-host': 'alldl.p.rapidapi.com',
+                                'x-rapidapi-host': 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
                                 'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
                             }
                         });
                         const apiData = await apiRes.json();
-                        videoDownloadUrl = apiData.data?.videoUrl || apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
+                        // Extracting media URL from standard Instagram downloader endpoints
+                        videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || (apiData.media && apiData.media[0]) || "";
                     }
 
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
@@ -310,7 +311,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Facebook post/video is Public.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Instagram post/reel is Public.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
