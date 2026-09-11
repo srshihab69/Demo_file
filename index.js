@@ -8,10 +8,8 @@ const bot = new TelegramBot(token);
 const app = express();
 app.use(bodyParser.json());
 
-// Store temporary media links and details for web viewer
 const mediaStore = new Map();
 
-// --- Helper: Format File Size ---
 const formatSize = (bytes) => {
     if (!bytes) return 'N/A';
     const k = 1024;
@@ -20,12 +18,10 @@ const formatSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// --- Premium Text Data ---
 const strings = {
     welcome: (name) => 
         `<blockquote>👋 <b>Hello, ${name}!</b></blockquote>\n\n` +
         `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
-    
     help: 
         `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
@@ -89,7 +85,6 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// --- Web Viewer Route for Direct Links (Other Files) ---
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
@@ -120,7 +115,6 @@ app.get('/sr/:filename', async (req, res) => {
     return res.redirect(mediaData.url);
 });
 
-// --- Webhook Handling ---
 app.post(`/api/webhook`, async (req, res) => {
     try {
         const update = req.body;
@@ -132,7 +126,6 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // 1. Basic Commands
         if (text === '/start') {
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
         }
@@ -143,8 +136,6 @@ app.post(`/api/webhook`, async (req, res) => {
             const latency = Math.floor(Math.random() * 10) + 40;
             await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
         }
-
-        // 2. /id Command
         else if (text.startsWith('/id')) {
             const args = text.split(' ');
             if (msg.reply_to_message) {
@@ -162,8 +153,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
             }
         }
-
-        // 3. Static Buttons
         else if (text === '🆔 My Info') {
             const u = msg.from;
             await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
@@ -174,8 +163,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
                 ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
-
-        // 4. User Shared via Keyboard
         else if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
             try {
@@ -187,21 +174,16 @@ app.post(`/api/webhook`, async (req, res) => {
                 await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
-
-        // 5. Check if user sent bot's own generated link back
         else if (text.includes(`${hostUrl}/sr/`)) {
             await bot.sendMessage(chatId, `<blockquote>ℹ️ <b>Direct Media Link</b></blockquote>\n\n<blockquote>You sent your own generated link. Tap the inline download button below to view or download it directly!</blockquote>`, {
                 parse_mode: 'HTML',
                 reply_markup: { inline_keyboard: [[{ text: '📥 Download', url: text.trim() }]] }
             });
         }
-
-        // 6. Detection (Forward, Media, Emoji, Social Links, Auto-lookup)
         else {
             let finalMessage = "";
             let inlineButtons = [];
 
-            // A: Forward Source
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
                 let fId = 'N/A', fName = 'Protected Source';
                 if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
@@ -215,7 +197,6 @@ app.post(`/api/webhook`, async (req, res) => {
                     `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
             }
 
-            // B: Media Detection & Direct Links
             let mId = "", mType = "", mExtra = "";
             let customDirectLink = "";
 
@@ -282,7 +263,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
             }
 
-            // C: TikTok or Facebook Video Link Detection & Direct Send in Chat
             const lowerText = text.toLowerCase();
             if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com') || lowerText.includes('facebook.com') || lowerText.includes('fb.watch') || lowerText.includes('fb.me')) {
                 const isTikTok = lowerText.includes('tiktok');
@@ -295,18 +275,17 @@ app.post(`/api/webhook`, async (req, res) => {
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
                     if (isTikTok) {
-                        const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(targetUrl)}`, {
-                            method: 'GET',
+                        // TikWM API with proper User-Agent headers to prevent blocks
+                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                             headers: {
-                                'Content-Type': 'application/json',
-                                'x-rapidapi-host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com',
-                                'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                             }
                         });
                         const apiData = await apiRes.json();
-                        videoDownloadUrl = apiData.video || apiData.play || (apiData.data && (apiData.data.play || apiData.data.video)) || "";
-                        if (!videoDownloadUrl && apiData.hdplay) videoDownloadUrl = apiData.hdplay;
-                        if (!videoDownloadUrl && apiData.data && apiData.data.hdplay) videoDownloadUrl = apiData.data.hdplay;
+                        
+                        if (apiData && apiData.code === 0 && apiData.data) {
+                            videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
+                        }
                     } else {
                         const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
                             method: 'POST',
@@ -340,7 +319,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
             }
 
-            // D: Custom Emoji
             const customEmojis = entities.filter(e => e.type === 'custom_emoji');
             if (customEmojis.length > 0) {
                 finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n\n<blockquote expandable>`;
@@ -350,7 +328,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 finalMessage += `</blockquote>\n\n`;
             }
 
-            // E: Auto-Lookup (User, Bot, Channel, Group)
             const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
             if (lookups.length > 0) {
                 let lookupResults = "";
