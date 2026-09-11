@@ -22,6 +22,7 @@ const strings = {
     welcome: (name) => 
         `<blockquote>👋 <b>Hello, ${name}!</b></blockquote>\n\n` +
         `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
+    
     help: 
         `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
@@ -36,7 +37,8 @@ const strings = {
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get file_id & Direct Link\n` +
-        ` · 🎥 TikTok/FB Video → Direct Video Send in Chat\n` +
+        ` · 🎥 TikTok Video → Send link for direct chat video download\n` +
+        ` · 📘 Facebook Video → Send link for direct chat video download\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
@@ -275,7 +277,6 @@ app.post(`/api/webhook`, async (req, res) => {
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
                     if (isTikTok) {
-                        // TikWM API with proper User-Agent headers to prevent blocks
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                             headers: {
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
