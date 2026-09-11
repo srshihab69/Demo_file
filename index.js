@@ -291,19 +291,8 @@ app.post(`/api/webhook`, async (req, res) => {
                 try {
                     const processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video, please wait...</b>`, { parse_mode: 'HTML' });
 
-                    // মেসেজ থেকে শুধু লিংক অংশটুকু এক্সট্রাক্ট করা (যদি সাথে এক্সট্রা টেক্সট থাকে)
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
-
-                    // যদি টিকটকের শর্ট লিংক হয়, তবে তার আসল ইউআরএল ফেচ করা
-                    if (targetUrl.includes('vm.tiktok.com') || targetUrl.includes('vt.tiktok.com')) {
-                        try {
-                            const headRes = await fetch(targetUrl, { method: 'HEAD', redirect: 'follow' });
-                            targetUrl = headRes.url;
-                        } catch (e) {
-                            // শর্ট লিংক রিজলভ না হলে আগেরটাই রাখবে
-                        }
-                    }
 
                     if (isTikTok) {
                         const apiRes = await fetch(`https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index?url=${encodeURIComponent(targetUrl)}`, {
@@ -315,7 +304,9 @@ app.post(`/api/webhook`, async (req, res) => {
                             }
                         });
                         const apiData = await apiRes.json();
-                        videoDownloadUrl = apiData.video || apiData.play || (apiData.data && apiData.data.play) || "";
+                        videoDownloadUrl = apiData.video || apiData.play || (apiData.data && (apiData.data.play || apiData.data.video)) || "";
+                        if (!videoDownloadUrl && apiData.hdplay) videoDownloadUrl = apiData.hdplay;
+                        if (!videoDownloadUrl && apiData.data && apiData.data.hdplay) videoDownloadUrl = apiData.data.hdplay;
                     } else {
                         const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
                             method: 'POST',
@@ -339,7 +330,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Try another link.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. The link might be private or invalid.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
