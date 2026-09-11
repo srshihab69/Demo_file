@@ -276,18 +276,22 @@ app.post(`/api/webhook`, async (req, res) => {
                     const words = text.split(/\s+/);
                     let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
 
-                    // Automatic link resolver for Facebook share/short URLs
+                    // Automatic link resolver for Facebook share/short URLs with proper User-Agent
                     if (!isTikTok) {
                         try {
-                            const headRes = await fetch(targetUrl, { method: 'HEAD', redirect: 'follow' });
-                            if (headRes.url) {
-                                targetUrl = headRes.url;
+                            const resolveRes = await fetch(targetUrl, {
+                                method: 'GET',
+                                redirect: 'follow',
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                                }
+                            });
+                            if (resolveRes.url && !resolveRes.url.includes('/share/')) {
+                                targetUrl = resolveRes.url;
                             }
                         } catch (redirectErr) {
-                            try {
-                                const getRes = await fetch(targetUrl, { redirect: 'follow' });
-                                if (getRes.url) targetUrl = getRes.url;
-                            } catch (e) {}
+                            console.error("Link resolution error:", redirectErr);
                         }
                     }
 
