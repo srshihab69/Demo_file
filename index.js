@@ -180,6 +180,12 @@ app.post(`/api/webhook`, async (req, res) => {
             });
         }
         else {
+            const lowerText = text.toLowerCase();
+            // Ignore Instagram, TikTok, or generic http links so it won't trigger the "How to use this bot" guide
+            if (lowerText.includes('instagram.com') || lowerText.includes('instagr.am') || lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com')) {
+                return res.status(200).send('OK');
+            }
+
             let finalMessage = "";
             let inlineButtons = [];
 
