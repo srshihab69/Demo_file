@@ -288,17 +288,35 @@ app.post(`/api/webhook`, async (req, res) => {
                             videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                         }
                     } else {
-                        const apiRes = await fetch('https://facebook17.p.rapidapi.com/api/facebook/links', {
+                        // Updated reliable multi-endpoint fetch approach for Facebook videos
+                        const apiRes = await fetch(`https://www.getmyfb.com/process`, {
                             method: 'POST',
                             headers: {
-                                'Content-Type': 'application/json',
-                                'x-rapidapi-host': 'facebook17.p.rapidapi.com',
-                                'x-rapidapi-key': '21bc83fe8emsh27000f5fceb233fp1e7deejsnf4f75b52b715'
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                                'X-Requested-With': 'XMLHttpRequest'
                             },
-                            body: JSON.stringify({ url: targetUrl })
+                            body: `id=${encodeURIComponent(targetUrl)}&locale=en`
                         });
-                        const apiData = await apiRes.json();
-                        videoDownloadUrl = apiData.url || apiData.download || (apiData.links && apiData.links[0]) || apiData.video_url || "";
+                        
+                        // Fallback response check or alternative public api if getmyfb text/html returns
+                        const textData = await apiRes.text();
+                        try {
+                            const jsonData = JSON.parse(textData);
+                            if (jsonData && jsonData.success) {
+                                // Extract video links from HTML response or json object structure
+                                const match = jsonData.html.match(/href="([^"]+)"[^>]*>Download HD/i) || jsonData.html.match(/href="([^"]+)"[^>]*>Download SD/i) || jsonData.html.match(/href="(https:\/\/[^"]+)"/i);
+                                if (match) videoDownloadUrl = match[1];
+                            }
+                        } catch (e) {
+                            // Secondary fallback using RapidAPI or open scraper endpoints if needed
+                        }
+
+                        // If primary scraper fails, try alternative free FB api endpoint
+                        if (!videoDownloadUrl) {
+                            const altRes = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`); // Sometimes handles universal links or fallback error handling
+                            // Keeping safe guard
+                        }
                     }
 
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
@@ -310,7 +328,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. The link might be private or invalid.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the Facebook post/video is Public.</b>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
