@@ -8,6 +8,9 @@ const bot = new TelegramBot(token);
 const app = express();
 app.use(bodyParser.json());
 
+// Store temporary media links for web viewer
+const mediaStore = new Map();
+
 // --- Helper: Format File Size ---
 const formatSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -85,6 +88,43 @@ const mainKeyboard = {
     },
     parse_mode: 'HTML'
 };
+
+// --- Web Viewer Route for Direct Links ---
+app.get('/sr/:filename', async (req, res) => {
+    const filename = req.params.filename;
+    const fileUrl = mediaStore.get(filename);
+
+    if (!fileUrl) {
+        return res.status(404).send('<h3>File not found or link expired!</h3>');
+    }
+
+    const isVideo = filename.includes('video') || filename.endsWith('.mp4');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Download Media - Any ID Finder Bot</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+                img, video { max-width: 100%; max-height: 60vh; border-radius: 8px; margin-bottom: 15px; }
+                .btn { display: inline-block; background: #3b82f6; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: background 0.2s; }
+                .btn:hover { background: #2563eb; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h3>Media Viewer</h3>
+                ${isVideo ? `<video controls autoplay src="${fileUrl}"></video>` : `<img src="${fileUrl}" alt="Media">`}
+                <br>
+                <a href="${fileUrl}" class="btn" download>📥 Download (No Watermark)</a>
+            </div>
+        </body>
+        </html>
+    `);
+});
 
 // --- Webhook Handling ---
 app.post(`/api/webhook`, async (req, res) => {
@@ -165,6 +205,7 @@ app.post(`/api/webhook`, async (req, res) => {
         else {
             let finalMessage = "";
             let inlineButtons = [];
+            const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
             // A: Forward Source
             if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
@@ -182,38 +223,46 @@ app.post(`/api/webhook`, async (req, res) => {
 
             // B: Media Detection & Direct Links
             let mId = "", mType = "", mExtra = "";
-            let fileLink = "";
+            let customDirectLink = "";
 
             if (msg.photo || msg.video || msg.animation || msg.document || msg.audio || msg.voice) {
                 let fileObj = null;
+                let fileTypeName = "file";
                 if (msg.photo) {
                     fileObj = msg.photo[msg.photo.length - 1];
                     mType = "📷 Photo Detected";
+                    fileTypeName = "photo";
                     mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.video) {
                     fileObj = msg.video;
                     mType = "🎬 Video Detected";
+                    fileTypeName = "video";
                     mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n⏳ Duration: <code>${fileObj.duration}s</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.animation) {
                     fileObj = msg.animation;
                     mType = "🎞️ GIF Detected";
+                    fileTypeName = "gif";
                     mExtra = `\n📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.sticker) {
                     fileObj = msg.sticker;
                     mType = "🎭 Sticker Detected";
+                    fileTypeName = "sticker";
                     mExtra = `\n📦 Set: <code>${fileObj.set_name || 'None'}</code>\n😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
                 } else if (msg.document) {
                     fileObj = msg.document;
                     mType = "📄 File Detected";
+                    fileTypeName = "document";
                     mExtra = `\n📛 Name: <code>${fileObj.file_name}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.audio) {
                     fileObj = msg.audio;
                     mType = "🎵 Audio Detected";
+                    fileTypeName = "audio";
                     mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.voice) {
                     fileObj = msg.voice;
                     mType = "🎤 Voice Detected";
-                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s</code>`;
+                    fileTypeName = "voice";
+                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s}</code>`;
                 }
 
                 if (fileObj && fileObj.file_id) {
@@ -221,18 +270,21 @@ app.post(`/api/webhook`, async (req, res) => {
                     try {
                         const fileInfo = await bot.getFile(mId);
                         if (fileInfo && fileInfo.file_path) {
-                            fileLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+                            const teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+                            const uniqueName = `sr-${fileTypeName}-${Math.random().toString(36.substring(2, 9))}`;
+                            mediaStore.set(uniqueName, teleLink);
+                            customDirectLink = `${hostUrl}/sr/${uniqueName}`;
                         }
                     } catch (err) {
-                        fileLink = 'N/A';
+                        customDirectLink = 'N/A';
                     }
                 }
 
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\n🔗 Direct Link: <a href="${fileLink}">Open / Download</a></blockquote>\n\n`;
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <a href="${customDirectLink}">Copy Link</a></blockquote>\n\n`;
                 
-                if (fileLink && fileLink !== 'N/A') {
-                    inlineButtons.push([{ text: '📥 Download File', url: fileLink }]);
+                if (customDirectLink && customDirectLink !== 'N/A') {
+                    inlineButtons.push([{ text: '📥 Download', url: customDirectLink }]);
                 }
             }
 
@@ -242,11 +294,14 @@ app.post(`/api/webhook`, async (req, res) => {
                 const isTikTok = lowerText.includes('tiktok');
                 const platformName = isTikTok ? 'TikTok Video' : 'Facebook Video';
                 const dummyId = 'VID_' + Math.floor(Math.random() * 1000000000);
+                const uniqueName = `sr-video-${Math.random().toString(36).substring(2, 9)}`;
+                mediaStore.set(uniqueName, text);
+                const socialDirectLink = `${hostUrl}/sr/${uniqueName}`;
                 
                 finalMessage += `<blockquote>🎥 <b>${platformName} Detected</b></blockquote>\n\n` +
-                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\n🔗 Direct Link: <a href="${text}">Source Link</a></blockquote>\n\n`;
+                    `<blockquote>🆔 ID: <code>${dummyId}</code>\n📐 Res: <code>1080x1920 (HD)</code>\n📊 Size: <code>~12.4 MB</code>\nDirect Link : <a href="${socialDirectLink}">Copy Link</a></blockquote>\n\n`;
 
-                inlineButtons.push([{ text: '📥 Download (No Watermark)', url: text }]);
+                inlineButtons.push([{ text: '📥 Download (No Watermark)', url: socialDirectLink }]);
             }
 
             // D: Custom Emoji
