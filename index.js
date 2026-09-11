@@ -187,12 +187,26 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        if (text === '/start') {
-            await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+        // Handle /start with deep link payload (e.g., /start sr69_xxxx)
+        if (text.startsWith('/start')) {
+            const parts = text.split(' ');
+            if (parts.length > 1 && parts[1].startsWith('sr69_')) {
+                const payload = parts[1];
+                if (mediaStore.has(payload)) {
+                    await handleMediaPayload(chatId, mediaStore.get(payload));
+                    return;
+                } else {
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This media link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
+                    return;
+                }
+            } else {
+                await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+                return;
+            }
         }
         else if (text.startsWith('/sr69')) {
             const parts = text.split(' ');
-            const payload = parts[1]; // e.g. sr69_abc1234
+            const payload = parts[1]; 
 
             if (payload && mediaStore.has(payload)) {
                 await handleMediaPayload(chatId, mediaStore.get(payload));
@@ -322,7 +336,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     mType = "🎵 Audio Detected";
                     fileTypeName = "audio";
                     mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                } else if (msg.voice) {
+-                } else if (msg.voice) {
                     fileObj = msg.voice;
                     mType = "🎤 Voice Detected";
                     fileTypeName = "voice";
@@ -350,14 +364,11 @@ app.post(`/api/webhook`, async (req, res) => {
                         user: msg.from 
                     };
 
-                    // Store for both browser route and deep link lookup
                     mediaStore.set(browserFilename, mediaObject);
                     mediaStore.set(payloadId, mediaObject);
 
-                    // Browser open link for direct link field
                     browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
 
-                    // Share link with auto /sr69 command injection via start parameter
                     const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
                     shareDeepLink = `https://t.me/${currentBotUser}?start=${payloadId}`;
                 }
