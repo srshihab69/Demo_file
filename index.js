@@ -35,7 +35,7 @@ const strings = {
         `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
-        ` · /tg-meta69-bot - Trigger media lookup via shared link\n` +
+        ` · /srmeta - Trigger media lookup via shared link\n` +
         ` · /tiktok - Download TikTok video\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
@@ -230,10 +230,10 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // Handle /start with deep link payload (e.g., /start tgmeta69_xxxx)
+        // Handle /start with deep link payload (e.g., /start srmeta_xxxx)
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
-            if (parts.length > 1 && parts[1].startsWith('tgmeta69_')) {
+            if (parts.length > 1 && parts[1].startsWith('srmeta_')) {
                 const payload = parts[1];
                 if (mediaStore.has(payload)) {
                     await handleMediaPayload(chatId, mediaStore.get(payload));
@@ -247,7 +247,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
         }
-        else if (text.startsWith('/tg-meta69-bot')) {
+        else if (text.startsWith('/srmeta')) {
             const parts = text.split(' ');
             const payload = parts[1]; 
 
@@ -321,7 +321,7 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
         else {
-            const matchParam = text.match(/[?&]start=(tgmeta69_[a-zA-Z0-9]+)/);
+            const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
             if (matchParam) {
                 const payload = matchParam[1];
                 if (mediaStore.has(payload)) {
@@ -393,7 +393,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 if (fileObj && fileObj.file_id) {
                     mId = fileObj.file_id;
                     const browserFilename = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
-                    const payloadId = `tgmeta69_${Math.random().toString(36).substring(2, 9)}`;
+                    const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
                     
                     let teleLink = "";
                     try {
@@ -494,7 +494,7 @@ app.post(`/api/webhook`, async (req, res) => {
             const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
             if (lookups.length > 0) {
                 let lookupResults = "";
-                let processedTargets = new Set(); // ইউনিক ফিল্টার সেট যাতে ডুপ্লিকেট না আসে
+                let processedTargets = new Set(); // ইউনিক ফিল্টার সেট যাতে ডুপ্লিকেট ইউজারনেম বারবার না আসে
 
                 for (let i = 0; i < lookups.length; i++) {
                     let target = "";
