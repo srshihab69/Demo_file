@@ -469,7 +469,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `<blockquote>⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅</blockquote>`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
@@ -477,7 +477,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     if (processingMsg) {
                         await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
                     }
-                    await bot.sendMessage(chatId, `⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅</blockquote>`, { parse_mode: 'HTML' });
                     return;
                 }
             }
