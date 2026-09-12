@@ -35,7 +35,7 @@ const strings = {
         `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
-        ` · /sr69 - Trigger media lookup via shared link\n` +
+        ` · /tg-meta69-bot - Trigger media lookup via shared link\n` +
         ` · /tiktok - Download TikTok video\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
@@ -230,10 +230,10 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // Handle /start with deep link payload (e.g., /start sr69_xxxx)
+        // Handle /start with deep link payload (e.g., /start tgmeta69_xxxx)
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
-            if (parts.length > 1 && parts[1].startsWith('sr69_')) {
+            if (parts.length > 1 && parts[1].startsWith('tgmeta69_')) {
                 const payload = parts[1];
                 if (mediaStore.has(payload)) {
                     await handleMediaPayload(chatId, mediaStore.get(payload));
@@ -247,7 +247,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
         }
-        else if (text.startsWith('/sr69')) {
+        else if (text.startsWith('/tg-meta69-bot')) {
             const parts = text.split(' ');
             const payload = parts[1]; 
 
@@ -321,7 +321,7 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
         else {
-            const matchParam = text.match(/[?&]start=(sr69_[a-zA-Z0-9]+)/);
+            const matchParam = text.match(/[?&]start=(tgmeta69_[a-zA-Z0-9]+)/);
             if (matchParam) {
                 const payload = matchParam[1];
                 if (mediaStore.has(payload)) {
@@ -393,7 +393,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 if (fileObj && fileObj.file_id) {
                     mId = fileObj.file_id;
                     const browserFilename = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
-                    const payloadId = `sr69_${Math.random().toString(36).substring(2, 9)}`;
+                    const payloadId = `tgmeta69_${Math.random().toString(36).substring(2, 9)}`;
                     
                     let teleLink = "";
                     try {
@@ -494,18 +494,22 @@ app.post(`/api/webhook`, async (req, res) => {
             const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
             if (lookups.length > 0) {
                 let lookupResults = "";
-                for (let i = 0; i < Math.min(lookups.length, 3); i++) {
+                let processedTargets = new Set(); // ইউনিক ফিল্টার সেট যাতে ডুপ্লিকেট না আসে
+
+                for (let i = 0; i < lookups.length; i++) {
                     let target = "";
                     if (lookups[i].type === 'mention') {
-                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length).toLowerCase();
                     } else if (lookups[i].type === 'url') {
                         const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
                         if (url.includes('t.me/')) {
-                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0];
+                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
                         }
                     }
 
-                    if (target.startsWith('@')) {
+                    if (target.startsWith('@') && !processedTargets.has(target)) {
+                        processedTargets.add(target);
+
                         try {
                             const chat = await bot.getChat(target);
                             lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
@@ -521,7 +525,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
                 }
                 if (lookupResults) {
-                    finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote expandable>${lookupResults}</blockquote>`;
+                    finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
                 }
             }
 
