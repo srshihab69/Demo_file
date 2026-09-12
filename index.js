@@ -29,16 +29,17 @@ const formatSize = (bytes) => {
 const strings = {
     welcome: (name) => 
         `<blockquote>👋 <b>Hello, ${name}!</b></blockquote>\n\n` +
-        `<blockquote>Welcome to <b>Any ID Finder Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
+        `<blockquote>Welcome to <b>TG Meta69 Bot</b>. Use the buttons below to get information about any user or media.</blockquote>`,
     
     help: 
-        `<blockquote>👑 <b>Any ID Finder Bot - Help Menu</b></blockquote>\n\n` +
+        `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
         ` · /sr69 - Trigger media lookup via shared link\n` +
+        ` · /tiktok - Download TikTok video\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
-        ` · /ping - Check latency & status</blockquote>\n\n` +
+        ` · /stat - Check bot statistics & status</blockquote>\n\n` +
         `<blockquote expandable>📱 <b>Keyboard Buttons:</b>\n` +
         ` · 👤 User Info - Get any user's ID\n` +
         ` · 🆔 My Info - Get your own ID details\n` +
@@ -61,13 +62,15 @@ const strings = {
         ` · Forward from channels to get channel ID\n` +
         ` · Type @username anywhere — no command needed!</blockquote>\n\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
-        `🛠️ Made with ❤️ by @NexGen_Community</blockquote>`,
+        `🛠️ Made with ❤️ by @sr_shihab69</blockquote>`,
 
-    ping: (lat) => 
-        `<blockquote>♻️ <b>Correct latency & status-</b></blockquote>\n\n` +
+    stat: (mediaCount, lat) => 
+        `<blockquote>📊 <b>Bot Statistics & Status</b></blockquote>\n\n` +
         `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
+        `🤖 Status: <b>Online</b>\n` +
         `🕒 Uptime: <b>Always Active</b>\n` +
-        `🤖 Status: <b>Online</b></blockquote>`,
+        `📂 Stored Media: <code>${mediaCount} items</code>\n` +
+        `⚙️ Version: <code>${process.version}</code></blockquote>`,
 
     id_err: 
         `<blockquote>❌ <b>Command Error</b></blockquote>\n\n` +
@@ -95,7 +98,7 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Express route for browser media viewer with a view layout and download button
+// Express route for browser media viewer
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
@@ -105,7 +108,7 @@ app.get('/sr/:filename', async (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Link Expired - Any ID Finder Bot</title>
+                <title>Link Expired - TG Meta69 Bot</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
@@ -141,7 +144,7 @@ app.get('/sr/:filename', async (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>View Media - Any ID Finder Bot</title>
+            <title>View Media - TG Meta69 Bot</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
@@ -159,7 +162,7 @@ app.get('/sr/:filename', async (req, res) => {
                     ${mediaHtml}
                 </div>
                 <a href="${mediaUrl}" class="download-btn" download>📥 Download File</a>
-                <div class="footer">Powered by Any ID Finder Bot</div>
+                <div class="footer">Powered by TG Meta69 Bot</div>
             </div>
         </body>
         </html>
@@ -255,12 +258,17 @@ app.post(`/api/webhook`, async (req, res) => {
 
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Invalid or Expired Link</b></blockquote>\n\n<blockquote>Please use a valid shared link.</blockquote>`, { parse_mode: 'HTML' });
         }
+        else if (text.startsWith('/tiktok')) {
+            await bot.sendMessage(chatId, `<blockquote>🎵 Send me a TikTok video link 🔗</blockquote>`, { parse_mode: 'HTML' });
+            return;
+        }
         else if (text === '/help') {
             await bot.sendMessage(chatId, strings.help, { parse_mode: 'HTML' });
         }
-        else if (text === '/ping') {
+        else if (text === '/stat') {
             const latency = Math.floor(Math.random() * 10) + 40;
-            await bot.sendMessage(chatId, strings.ping(latency), { parse_mode: 'HTML' });
+            const effectiveCount = Math.ceil(mediaStore.size / 2);
+            await bot.sendMessage(chatId, strings.stat(effectiveCount, latency), { parse_mode: 'HTML' });
         }
         else if (text.startsWith('/id')) {
             const args = text.split(' ');
@@ -313,7 +321,6 @@ app.post(`/api/webhook`, async (req, res) => {
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
         else {
-            // Check if user manually pasted a deep link containing start=sr69_
             const matchParam = text.match(/[?&]start=(sr69_[a-zA-Z0-9]+)/);
             if (matchParam) {
                 const payload = matchParam[1];
@@ -414,7 +421,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
 
                 finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\nDirect Link : <code>${browserDirectLink}</code></blockquote>\n\n`;
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\n🔗 Direct Link : <code>${browserDirectLink}</code></blockquote>\n\n`;
                 
                 if (shareDeepLink) {
                     inlineButtons.push([{ text: '📤 Share Link', switch_inline_query: shareDeepLink }]);
@@ -424,39 +431,53 @@ app.post(`/api/webhook`, async (req, res) => {
             const lowerText = text.toLowerCase();
             if (lowerText.includes('tiktok.com') || lowerText.includes('vm.tiktok.com')) {
                 let videoDownloadUrl = "";
+                let processingMsg = null;
 
                 try {
-                    const processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video, please wait...</b>`, { parse_mode: 'HTML' });
+                    processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video, please wait...</b>`, { parse_mode: 'HTML' });
 
                     const words = text.split(/\s+/);
-                    let targetUrl = words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
+                    let targetUrl = words.find(word => 
+                        (word.startsWith('http://') || word.startsWith('https://')) && 
+                        (word.includes('tiktok.com') || word.includes('vm.tiktok.com')) && 
+                        !word.includes('tiktoklite')
+                    ) || words.find(word => word.startsWith('http://') || word.startsWith('https://')) || text.trim();
+
+                    console.log("Extracted TikTok Target URL:", targetUrl);
 
                     const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                         }
                     });
+                    
                     const apiData = await apiRes.json();
+                    console.log("TikWM API Response Data:", JSON.stringify(apiData));
                     
                     if (apiData && apiData.code === 0 && apiData.data) {
                         videoDownloadUrl = apiData.data.play || apiData.data.hdplay || "";
                     }
 
-                    await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+                    if (processingMsg) {
+                        await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+                    }
 
                     if (videoDownloadUrl) {
                         await bot.sendVideo(chatId, videoDownloadUrl, {
-                            caption: `📥 <b>Downloaded via Any ID Finder Bot</b>\n👨‍💻 Developer: @srshihab69`,
+                            caption: `📥 <b>Downloaded via TG Meta69 Bot</b>\n👨‍💻 Developer: @srshihab69`,
                             parse_mode: 'HTML'
                         });
                         return;
                     } else {
-                        await bot.sendMessage(chatId, `❌ <b>Could not extract direct video URL. Make sure the TikTok video is Public.</b>`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
                         return;
                     }
                 } catch (apiErr) {
-                    console.error("Social Video Send Error:", apiErr);
-                    await bot.sendMessage(chatId, `❌ <b>An error occurred while processing the video.</b>`, { parse_mode: 'HTML' });
+                    console.error("TikTok Video Send Error:", apiErr);
+                    if (processingMsg) {
+                        await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+                    }
+                    await bot.sendMessage(chatId, `⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
                     return;
                 }
             }
@@ -522,4 +543,4 @@ app.post(`/api/webhook`, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Any ID Finder Bot Active on Port ${PORT}`));
+app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
