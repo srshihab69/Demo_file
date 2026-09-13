@@ -18,9 +18,11 @@ bot.getMe().then(me => {
 const app = express();
 app.use(bodyParser.json());
 
-// In-memory store for media and upload session tracking
+// In-memory store for media, upload sessions, and passwords
 const mediaStore = new Map();
 const pendingUploads = new Map();
+const mediaPasswords = new Map(); // stores password for protected media
+const userPasswordInputs = new Map(); // tracks user waiting state to enter password
 
 const formatSize = (bytes) => {
     if (!bytes) return '> 📊 <b>N/A</b>';
@@ -30,7 +32,6 @@ const formatSize = (bytes) => {
     return `> 📊 <code>${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}</code>`;
 };
 
-// Upload helper for Catbox.moe (Permanent Storage)
 async function uploadToCatbox(fileBuffer, fileName) {
     try {
         const form = new FormData();
@@ -49,7 +50,6 @@ async function uploadToCatbox(fileBuffer, fileName) {
     }
 }
 
-// Upload helper for Litterbox (Temporary Storage: 1h, 24h, 48h, 72h)
 async function uploadToLitterbox(fileBuffer, fileName, time) {
     try {
         const form = new FormData();
@@ -69,7 +69,6 @@ async function uploadToLitterbox(fileBuffer, fileName, time) {
     }
 }
 
-// Helper to get file buffer from Telegram file_id
 async function getFileBuffer(fileId) {
     const fileLink = await bot.getFileLink(fileId);
     const response = await axios.get(fileLink, { responseType: 'arraybuffer' });
@@ -79,7 +78,7 @@ async function getFileBuffer(fileId) {
 const strings = {
     welcome: (name) => 
         `> 👋 <b>Hello, ${name}!</b>\n\n` +
-        `> Welcome to <b>TG Meta69 Bot!</b> Explore user & media information, manage media tools, upload to Cloud storage with custom expiration options, and download TikTok videos with ease. 🚀`,
+        `> Welcome to <b>TG Meta69 Bot!</b> Explore user & media information, manage media tools, upload to Cloud storage with password protection options, and download TikTok videos smoothly. 🚀`,
     
     help: 
         `> 👑 <b>TG Meta69 Bot - Help Menu</b>\n\n` +
@@ -96,21 +95,10 @@ const strings = {
         `>  · ☎️ Support - Contact developer</blockquote>\n\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         `>  · 📩 Forward Msg → Get source & media ID\n` +
-        `>  · 📷 Send Photo/Video/File/Doc → Choose Cloud Storage (Catbox Permanent / Litterbox 1h, 24h, 48h, 72h) to get Direct Links & Share Bot Deep Links\n` +
-        `>  · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
+        `>  · 📷 Send Photo/Video/File/Doc → Choose Password Protected or Unprotected Cloud Storage Links!\n` +
+        `>  · 🎥 TikTok Video → Send link for direct chat buffer video download (Under 30MB)\n` +
         `>  · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
-        `>  · 📄 Send Document → Get file_id & cloud options\n` +
-        `>  · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
-        `<blockquote expandable>🔍 <b>Auto-Detect:</b>\n` +
-        `>  · Just type @username in chat\n` +
-        `>  · Bot will automatically detect & look up the user info\n` +
-        `>  · Works for users, bots, channels & groups!\n` +
-        `>  · Up to 3 usernames per message</blockquote>\n\n` +
-        `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
-        `>  · Reply /id to any message to get sender's ID\n` +
-        `>  · Use buttons for instant one-click ID lookup\n` +
-        `>  · Forward from channels to get channel ID\n` +
-        `>  · Type @username anywhere — no command needed!</blockquote>\n\n` +
+        `>  · 📄 Send Document → Get file_id & cloud options</blockquote>\n\n` +
         `> 📞 Support: @srshihab69\n` +
         `> 🛠️ Made with ❤️ by @sr_shihab69`,
 
@@ -148,7 +136,7 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Express route for browser media viewer
+// Express route for browser media viewer with Password Support
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
@@ -169,7 +157,41 @@ app.get('/sr/:filename', async (req, res) => {
             <body>
                 <div class="container">
                     <h3>❌ Link Expired or Not Found</h3>
-                    <p>This media link has expired or is invalid. Please send the link/media to the bot again to get a fresh link.</p>
+                    <p>This media link has expired or is invalid. Please send the media to the bot again to get a fresh link.</p>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+
+    const requiredPassword = mediaPasswords.get(filename);
+    const providedPassword = req.query.pwd || '';
+
+    if (requiredPassword && providedPassword !== requiredPassword) {
+        return res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Password Protected - TG Meta69 Bot</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
+                    .container { text-align: center; max-width: 400px; width: 100%; background: #1e293b; padding: 25px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
+                    input { width: 80%; padding: 12px; font-size: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; margin-bottom: 15px; outline: none; }
+                    button { background: #38bdf8; color: #0f172a; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+                    button:hover { background: #0ea5e9; }
+                    .error { color: #f87171; font-size: 13px; margin-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h3>🔒 Password Protected Media</h3>
+                    <p style="color: #94a3b8; font-size: 14px;">This file is secured with a password. Please enter it below to view or download.</p>
+                    <form method="GET" action="">
+                        <input type="password" name="pwd" placeholder="Enter password..." required autofocus /><br>
+                        <button type="submit">Unlock Media</button>
+                    </form>
+                    ${providedPassword ? '<div class="error">Incorrect Password! Please try again.</div>' : ''}
                 </div>
             </body>
             </html>
@@ -208,7 +230,7 @@ app.get('/sr/:filename', async (req, res) => {
         <body>
             <div class="container">
                 <h3 style="margin-top: 5px; color: #f8fafc;">✨ Media Viewer</h3>
-                .media-box {
+                <div class="media-box">
                     ${mediaHtml}
                 </div>
                 <a href="${mediaUrl}" class="download-btn" download>📥 Download File</a>
@@ -219,9 +241,17 @@ app.get('/sr/:filename', async (req, res) => {
     `);
 });
 
-// Helper function to handle media retrieval from payload/link
-async function handleMediaPayload(chatId, mediaData) {
+async function handleMediaPayload(chatId, mediaData, providedPwd = '') {
     if (mediaData) {
+        const filenameKey = mediaData.browserFilename;
+        const reqPwd = filenameKey ? mediaPasswords.get(filenameKey) : null;
+
+        if (reqPwd && providedPwd !== reqPwd) {
+            userPasswordInputs.set(chatId, { filenameKey, mediaData });
+            await bot.sendMessage(chatId, `> 🔒 <b>Password Required</b>\n\n> This media is protected with a password. Please type and send the password in chat to access it.`, { parse_mode: 'HTML' });
+            return false;
+        }
+
         const generatorName = mediaData.user ? (mediaData.user.first_name || 'Unknown User') : 'Unknown User';
         const generatorId = mediaData.user ? mediaData.user.id : 'N/A';
         const generatorUsername = mediaData.user && mediaData.user.username ? `@${mediaData.user.username}` : 'No Username';
@@ -270,9 +300,10 @@ async function handleMediaPayload(chatId, mediaData) {
 }
 
 app.post(`/api/webhook`, async (req, res) => {
-    // প্রাথমিক সিকিউরিটি ও ভ্যালিডেশন চেক
+    // Initial validation check to ensure payload exists
     if (!req.body || (!req.body.message && !req.body.callback_query)) {
-        return res.status(200).send('OK');
+        if (!res.headersSent) res.status(200).send('OK');
+        return;
     }
 
     try {
@@ -309,99 +340,21 @@ app.post(`/api/webhook`, async (req, res) => {
                         }
                     });
                     await bot.answerCallbackQuery(callbackQuery.id);
-                } else if (data.startsWith('upload_')) {
-                    const parts = data.split('_');
-                    let uploadType, timeVal, origMsgId;
-
-                    if (parts[1] === 'catbox') {
-                        uploadType = 'catbox';
-                        origMsgId = parts[2];
-                    } else {
-                        uploadType = 'litter';
-                        timeVal = parts[2];
-                        origMsgId = parts[3];
-                    }
-
+                } else if (data.startsWith('pwd_ask_')) {
+                    const origMsgId = data.split('_')[2];
+                    userPasswordInputs.set(chatId, { mode: 'setting_pwd', origMsgId });
+                    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Please type the password you want to set for this media in chat.' });
+                    await bot.sendMessage(chatId, `> 🔐 <b>Set Media Password</b>\n\n> Please type and send the password you want to set for this file.`, { parse_mode: 'HTML' });
+                } else if (data.startsWith('pwd_none_')) {
+                    const origMsgId = data.split('_')[2];
                     const pendingKey = `${chatId}_${origMsgId}`;
                     const fileData = pendingUploads.get(pendingKey);
 
                     if (!fileData) {
-                        await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired or file not found. Please resend the file.', show_alert: true });
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired. Please resend the file.', show_alert: true });
                     } else {
-                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Processing and uploading file to cloud...' });
-                        await bot.editMessageText(`> 🔄 <b>Uploading file to cloud storage, please wait...</b>`, {
-                            chat_id: chatId,
-                            message_id: msg.message_id,
-                            parse_mode: 'HTML'
-                        });
-
-                        try {
-                            const buffer = await getFileBuffer(fileData.fileId);
-                            let directUrl = '';
-                            const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
-
-                            if (uploadType === 'catbox') {
-                                directUrl = await uploadToCatbox(buffer, fileData.fileName);
-                            } else {
-                                let litterTime = '1h';
-                                if (timeVal === '24') litterTime = '24h';
-                                else if (timeVal === '48') litterTime = '72h';
-                                else if (timeVal === '72') litterTime = '72h';
-                                else if (timeVal === '1') litterTime = '1h';
-
-                                directUrl = await uploadToLitterbox(buffer, fileData.fileName, litterTime);
-                            }
-
-                            pendingUploads.delete(pendingKey);
-
-                            const browserFilename = `sr-${fileData.fileType}-${Math.random().toString(36).substring(2, 9)}`;
-                            const mediaObject = { 
-                                type: 'media', 
-                                url: directUrl, 
-                                fileId: fileData.fileId, 
-                                fileType: fileData.fileType, 
-                                user: callbackQuery.from 
-                            };
-                            mediaStore.set(browserFilename, mediaObject);
-                            mediaStore.set(payloadId, mediaObject);
-
-                            const hostUrl = `https://${req.get('host')}`;
-                            const browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
-
-                            const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
-                            const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
-
-                            const successText = `> ✅ <b>File Uploaded Successfully!</b>\n\n` +
-                                `> ✨ <b>Cloud Direct Link:</b>\n` +
-                                `> 🔗 <code>${directUrl}</code>\n\n` +
-                                `> 🌐 <b>Viewer Link:</b>\n` +
-                                `> 🔗 <code>${browserDirectLink}</code>`;
-
-                            await bot.editMessageText(successText, {
-                                chat_id: chatId,
-                                message_id: msg.message_id,
-                                parse_mode: 'HTML',
-                                reply_markup: {
-                                    inline_keyboard: [
-                                        [
-                                            { text: '🌐 Open Browser Link', url: directUrl }
-                                        ],
-                                        [
-                                            { text: '📤 Share Direct Link', url: `https://t.me/share/url?url=${encodeURIComponent(directUrl)}&text=Check%20out%20this%20media%20file!` },
-                                            { text: '🤖 Share Bot Link', url: shareBotLinkUrl }
-                                        ]
-                                    ]
-                                }
-                            });
-
-                        } catch (error) {
-                            console.error('Upload Process Error:', error);
-                            await bot.editMessageText(`> ❌ <b>Upload Failed!</b> Please try again later.`, {
-                                chat_id: chatId,
-                                message_id: msg.message_id,
-                                parse_mode: 'HTML'
-                            });
-                        }
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Uploading file without password...' });
+                        await processFileUpload(chatId, msg.message_id, fileData, callbackQuery.from, null);
                     }
                 }
             }
@@ -413,6 +366,38 @@ app.post(`/api/webhook`, async (req, res) => {
             const text = msg.text || msg.caption || "";
             const entities = (msg.entities || []).concat(msg.caption_entities || []);
             const hostUrl = `https://${req.get('host')}`;
+
+            // Check if user is typing a password response
+            if (userPasswordInputs.has(chatId) && text && !text.startsWith('/')) {
+                const state = userPasswordInputs.get(chatId);
+                if (state.mode === 'setting_pwd') {
+                    const password = text.trim();
+                    const pendingKey = `${chatId}_${state.origMsgId}`;
+                    const fileData = pendingUploads.get(pendingKey);
+                    userPasswordInputs.delete(chatId);
+
+                    if (!fileData) {
+                        await bot.sendMessage(chatId, `> ❌ <b>Session Expired.</b> Please resend the file.`, { parse_mode: 'HTML' });
+                    } else {
+                        await bot.sendMessage(chatId, `> ⏳ <b>Uploading password-protected file...</b>`, { parse_mode: 'HTML' });
+                        await processFileUpload(chatId, msg.message_id - 1, fileData, msg.from, password);
+                    }
+                    if (!res.headersSent) res.status(200).send('OK');
+                    return;
+                } else if (state.filenameKey && state.mediaData) {
+                    const password = text.trim();
+                    const reqPwd = mediaPasswords.get(state.filenameKey);
+                    userPasswordInputs.delete(chatId);
+
+                    if (password === reqPwd) {
+                        await handleMediaPayload(chatId, state.mediaData, password);
+                    } else {
+                        await bot.sendMessage(chatId, `> ❌ <b>Incorrect Password!</b> Access denied.`, { parse_mode: 'HTML' });
+                    }
+                    if (!res.headersSent) res.status(200).send('OK');
+                    return;
+                }
+            }
 
             if (text.startsWith('/start')) {
                 const parts = text.split(' ');
@@ -491,17 +476,6 @@ app.post(`/api/webhook`, async (req, res) => {
                     `>  · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
                     `>  · Contact my developer: <b>@srshihab69</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
             }
-            else if (msg.user_shared) {
-                const userId = msg.user_shared.user_id;
-                try {
-                    const user = await bot.getChat(userId);
-                    const info = `> 🔍 <b>Shared User Info</b>\n\n` +
-                        `> 🆔 ID: <code>${user.id}</code>\n> 👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n> 🏷️ User: @${user.username || 'None'}\n> ⭐ Prem: ${user.is_premium ? '✅' : '❌'}`;
-                    await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
-                } catch (e) {
-                    await bot.sendMessage(chatId, `> 🔍 <b>Shared User Info</b>\n\n> 🆔 ID: <code>${userId}</code>\n> ⚠️ Details restricted.`, { parse_mode: 'HTML' });
-                }
-            }
             else if (text.includes(`${hostUrl}/sr/`)) {
                 const trimmedLink = text.trim();
                 const filename = trimmedLink.split('/sr/')[1]?.split(' ')[0];
@@ -518,11 +492,10 @@ app.post(`/api/webhook`, async (req, res) => {
                 let processingMsg = null;
 
                 try {
-                    processingMsg = await bot.sendMessage(chatId, `> ⏳ <b>Downloading video...</b>`, { parse_mode: 'HTML' });
+                    processingMsg = await bot.sendMessage(chatId, `> ⏳ <b>Processing TikTok video...</b>`, { parse_mode: 'HTML' });
 
                     const urlRegex = /https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/g;
                     const foundUrls = text.match(urlRegex) || [];
-                    
                     let targetUrl = foundUrls.find(url => !url.includes('tiktoklite')) || foundUrls[0] || text.trim();
 
                     if (targetUrl.includes('?')) {
@@ -530,11 +503,8 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
 
                     const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                        }
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
                     });
-                    
                     const apiData = await apiRes.json();
                     
                     if (apiData && apiData.code === 0 && apiData.data) {
@@ -552,6 +522,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         const sizeInMB = videoBuffer.length / (1024 * 1024);
 
                         if (sizeInMB <= 30) {
+                            // Buffer and send video to chat directly
                             await bot.sendVideo(chatId, videoBuffer, {
                                 caption: `> 📥 <b>Downloaded via TG Meta69 Bot</b>\n> 📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n> 👨‍💻 Developer: @srshihab69`,
                                 parse_mode: 'HTML'
@@ -560,10 +531,9 @@ app.post(`/api/webhook`, async (req, res) => {
                                 contentType: 'video/mp4'
                             });
                         } else {
+                            // File larger than 30MB, provide inline button download
                             await bot.sendMessage(chatId, 
-                                `> ⚠️ <b>Video is larger than 30MB!</b>\n\n` +
-                                `> 📊 File Size: <code>${sizeInMB.toFixed(2)} MB</code>\n` +
-                                `> 🔗 Click the button below to download the video directly from the browser. ✅`, 
+                                `> ⚠️ <b>Video is larger than 30MB! (${sizeInMB.toFixed(2)} MB)</b>\n\n> 🔗 Click the button below to download the video directly from the browser. ✅`, 
                                 { 
                                     parse_mode: 'HTML',
                                     reply_markup: {
@@ -575,166 +545,62 @@ app.post(`/api/webhook`, async (req, res) => {
                             );
                         }
                     } else {
-                        await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
+                        await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported or video not found.</b>`, { parse_mode: 'HTML' });
                     }
                 } catch (apiErr) {
                     console.error("TikTok Video Error:", apiErr);
                     if (processingMsg) {
                         await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
                     }
-                    await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `> ⚠️ <b>Failed to process TikTok video. Please try again.</b>`, { parse_mode: 'HTML' });
                 }
             }
             else {
-                const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
-                if (matchParam) {
-                    const payload = matchParam[1];
-                    if (mediaStore.has(payload)) {
-                        await handleMediaPayload(chatId, mediaStore.get(payload));
-                    }
-                } else {
-                    let finalMessage = "";
-                    let inlineButtons = [];
+                let fileObj = null;
+                let fileTypeName = "file";
 
+                if (msg.photo) {
+                    fileObj = msg.photo[msg.photo.length - 1];
+                    fileTypeName = "photo";
+                } else if (msg.video) {
+                    fileObj = msg.video;
+                    fileTypeName = "video";
+                } else if (msg.animation) {
+                    fileObj = msg.animation;
+                    fileTypeName = "gif";
+                } else if (msg.sticker) {
+                    fileObj = msg.sticker;
+                    fileTypeName = "sticker";
+                } else if (msg.document) {
+                    fileObj = msg.document;
+                    fileTypeName = "document";
+                } else if (msg.audio) {
+                    fileObj = msg.audio;
+                    fileTypeName = "audio";
+                } else if (msg.voice) {
+                    fileObj = msg.voice;
+                    fileTypeName = "voice";
+                }
+
+                if (fileObj && fileObj.file_id) {
                     const isForwarded = Boolean(msg.forward_date || msg.forward_from || msg.forward_from_chat || msg.forward_origin);
+                    
+                    if (!isForwarded) {
+                        const pendingKey = `${chatId}_${msg.message_id}`;
+                        pendingUploads.set(pendingKey, { fileId: fileObj.file_id, fileName: `${fileTypeName}_file`, fileType: fileTypeName });
 
-                    if (isForwarded) {
-                        let fId = 'N/A', fName = 'Protected Source';
-                        if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
-                        else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
-                        else if (msg.forward_origin) {
-                            const o = msg.forward_origin;
-                            fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
-                            fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
-                        }
-                        finalMessage += `> 📩 <b>Forwarded Message</b>\n\n` +
-                            `> 🆔 Source ID: <code>${fId}</code>\n> 👤 Name: <code>${fName}</code>\n\n`;
-                    }
-
-                    let mId = "", mType = "", mExtra = "";
-                    let fileObj = null;
-                    let fileTypeName = "file";
-
-                    if (msg.photo) {
-                        fileObj = msg.photo[msg.photo.length - 1];
-                        mType = "📷 Photo Detected";
-                        fileTypeName = "photo";
-                        mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                    } else if (msg.video) {
-                        fileObj = msg.video;
-                        mType = "🎬 Video Detected";
-                        fileTypeName = "video";
-                        mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> ⏳ Duration: <code>${fileObj.duration}s</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                    } else if (msg.animation) {
-                        fileObj = msg.animation;
-                        mType = "🎞️ GIF Detected";
-                        fileTypeName = "gif";
-                        mExtra = `\n> 📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                    } else if (msg.sticker) {
-                        fileObj = msg.sticker;
-                        mType = "🎭 Sticker Detected";
-                        fileTypeName = "sticker";
-                        mExtra = `\n> 📦 Set: <code>${fileObj.set_name || 'None'}</code>\n> 😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
-                    } else if (msg.document) {
-                        fileObj = msg.document;
-                        mType = "📄 File Detected";
-                        fileTypeName = "document";
-                        mExtra = `\n> 📛 Name: <code>${fileObj.file_name}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                    } else if (msg.audio) {
-                        fileObj = msg.audio;
-                        mType = "🎵 Audio Detected";
-                        fileTypeName = "audio";
-                        mExtra = `\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-                    } else if (msg.voice) {
-                        fileObj = msg.voice;
-                        mType = "🎤 Voice Detected";
-                        fileTypeName = "voice";
-                        mExtra = `\n> ⏳ Duration: <code>${fileObj.duration}s</code>`;
-                    }
-
-                    if (fileObj && fileObj.file_id) {
-                        mId = fileObj.file_id;
-
-                        if (!isForwarded) {
-                            const pendingKey = `${chatId}_${msg.message_id}`;
-                            pendingUploads.set(pendingKey, { fileId: mId, fileName: `${fileTypeName}_file`, fileType: fileTypeName });
-
-                            finalMessage += `> ✨ <b>${mType}</b>\n\n` +
-                                `> 🆔 File ID: <code>${mId}</code>${mExtra}\n\n` +
-                                `> 📂 <b>Please select cloud upload expiration time below:</b>`;
-
-                            inlineButtons.push([
-                                { text: '⏳ Litter (1h)', callback_data: `upload_litter_1_${msg.message_id}` },
-                                { text: '⏳ Litter (24h)', callback_data: `upload_litter_24_${msg.message_id}` }
-                            ]);
-                            inlineButtons.push([
-                                { text: '⏳ Litter (48h)', callback_data: `upload_litter_48_${msg.message_id}` },
-                                { text: '⏳ Litter (72h)', callback_data: `upload_litter_72_${msg.message_id}` }
-                            ]);
-                            inlineButtons.push([
-                                { text: '♾️ Catbox (Permanent)', callback_data: `upload_catbox_${msg.message_id}` }
-                            ]);
-                        } else {
-                            finalMessage += `> ✨ <b>${mType}</b>\n\n` +
-                                `> 🆔 File ID: <code>${mId}</code>${mExtra}`;
-                        }
-                    }
-
-                    const customEmojis = entities.filter(e => e.type === 'custom_emoji');
-                    if (customEmojis.length > 0) {
-                        finalMessage += `\n\n> 💎 <b>Premium Emoji Detected</b>\n<blockquote expandable>`;
-                        const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
-                        uniqueEmojiIds.forEach((emojiId, index) => {
-                            finalMessage += `> 🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
-                        });
-                        finalMessage += `</blockquote>`;
-                    }
-
-                    const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
-                    if (lookups.length > 0) {
-                        let lookupResults = "";
-                        let processedTargets = new Set();
-
-                        for (let i = 0; i < lookups.length; i++) {
-                            let target = "";
-                            if (lookups[i].type === 'mention') {
-                                target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length).toLowerCase();
-                            } else if (lookups[i].type === 'url') {
-                                const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
-                                if (url.includes('t.me/')) {
-                                    target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
+                        await bot.sendMessage(chatId, 
+                            `> ✨ <b>Media Detected Successfully!</b>\n\n> 🔐 <b>Do you want to secure this media with a password?</b>`, 
+                            {
+                                parse_mode: 'HTML',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [{ text: '🔒 Set Password', callback_data: `pwd_ask_${msg.message_id}` }],
+                                        [{ text: '🔓 No Password (Unprotected)', callback_data: `pwd_none_${msg.message_id}` }]
+                                    ]
                                 }
                             }
-
-                            if (target.startsWith('@') && !processedTargets.has(target)) {
-                                processedTargets.add(target);
-
-                                try {
-                                    const chat = await bot.getChat(target);
-                                    lookupResults += `> 👤 <b>${chat.first_name || chat.title}</b>\n> 🆔 ID: <code>${chat.id}</code>\n> 🏷️ User: ${target}\n\n`;
-                                    
-                                    if (chat.type === 'private') {
-                                        const isBot = target.toLowerCase().endsWith('bot');
-                                        inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
-                                    } else {
-                                        const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
-                                        inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
-                                    }
-                                } catch (e) {}
-                            }
-                        }
-                        if (lookupResults) {
-                            finalMessage += `\n\n> 🔍 <b>Auto Lookup</b>\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
-                        }
-                    }
-
-                    if (finalMessage) {
-                        await bot.sendMessage(chatId, finalMessage, { 
-                            parse_mode: 'HTML', 
-                            reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
-                        });
-                    } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
-                        await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
+                        );
                     }
                 }
             }
@@ -743,12 +609,65 @@ app.post(`/api/webhook`, async (req, res) => {
     } catch (err) {
         console.error("Critical Error:", err);
     } finally {
-        // ফায়ারবেস বা ভেরেল সার্ভার যেন ঘুমিয়ে না পড়ে এবং প্রসেস শেষ হয়ে গেলে ঠিকঠাক স্ট্যাটাস পাঠায়
         if (!res.headersSent) {
             res.status(200).send('OK');
         }
     }
 });
+
+async function processFileUpload(chatId, messageId, fileData, userObj, password) {
+    try {
+        const buffer = await getFileBuffer(fileData.fileId);
+        // Using catbox for permanent robust storage
+        const directUrl = await uploadToCatbox(buffer, fileData.fileName);
+        const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
+        const browserFilename = `sr-${fileData.fileType}-${Math.random().toString(36).substring(2, 9)}`;
+
+        const mediaObject = { 
+            type: 'media', 
+            url: directUrl, 
+            fileId: fileData.fileId, 
+            fileType: fileData.fileType, 
+            user: userObj,
+            browserFilename
+        };
+
+        mediaStore.set(browserFilename, mediaObject);
+        mediaStore.set(payloadId, mediaObject);
+
+        if (password) {
+            mediaPasswords.set(browserFilename, password);
+            mediaPasswords.set(payloadId, password);
+        }
+
+        const hostUrl = `https://${process.env.VERCEL_URL || 'localhost:3000'}`; // Will adapt dynamically
+        const browserDirectLink = `https://${reqHost || 'yourdomain.com'}/sr/${browserFilename}`;
+
+        const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
+        const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
+
+        const successText = `> ✅ <b>File Uploaded Successfully!</b>\n\n` +
+            (password ? `> 🔒 <b>Protected with Password:</b> <code>${password}</code>\n\n` : `> 🔓 <b>Status:</b> Unprotected\n\n`) +
+            `> ✨ <b>Cloud Direct Link:</b>\n> 🔗 <code>${directUrl}</code>\n\n` +
+            `> 🌐 <b>Viewer Link:</b>\n> 🔗 <code>https://${bot.options.webHook?.url ? new URL(bot.options.webHook.url).host : 'yourdomain'}/sr/${browserFilename}</code>`;
+
+        await bot.sendMessage(chatId, successText, {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🌐 Open Browser Link', url: directUrl }],
+                    [
+                        { text: '📤 Share Direct Link', url: `https://t.me/share/url?url=${encodeURIComponent(directUrl)}&text=Check%20out%20this%20media%20file!` },
+                        { text: '🤖 Share Bot Link', url: shareBotLinkUrl }
+                    ]
+                ]
+            }
+        });
+    } catch (e) {
+        console.error("Cloud Upload Error:", e);
+        await bot.sendMessage(chatId, `> ❌ <b>Upload Failed!</b> Please try sending the file again.`, { parse_mode: 'HTML' });
+    }
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
