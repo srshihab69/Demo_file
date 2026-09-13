@@ -23,11 +23,11 @@ const mediaStore = new Map();
 const pendingUploads = new Map();
 
 const formatSize = (bytes) => {
-    if (!bytes) return 'N/A';
+    if (!bytes) return '> 📊 <b>N/A</b>';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `> 📊 <code>${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}</code>`;
 };
 
 // Upload helper for Catbox.moe (Permanent Storage)
@@ -84,33 +84,33 @@ const strings = {
     help: 
         `> 👑 <b>TG Meta69 Bot - Help Menu</b>\n\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
-        ` · /start - Start the bot\n` +
-        ` · /srmeta - Trigger media lookup via shared link\n` +
-        ` · /tiktok - Download TikTok video\n` +
-        ` · /help - Show this help menu\n` +
-        ` · /id @username - Get ID by username\n` +
-        ` · /stat - Check bot statistics & status</blockquote>\n\n` +
+        `>  · /start - Start the bot\n` +
+        `>  · /srmeta - Trigger media lookup via shared link\n` +
+        `>  · /tiktok - Download TikTok video\n` +
+        `>  · /help - Show this help menu\n` +
+        `>  · /id @username - Get ID by username\n` +
+        `>  · /stat - Check bot statistics & status</blockquote>\n\n` +
         `<blockquote expandable>📱 <b>Keyboard Buttons:</b>\n` +
-        ` · 👤 User Info - Get any user's ID\n` +
-        ` · 🆔 My Info - Get your own ID details\n` +
-        ` · ☎️ Support - Contact developer</blockquote>\n\n` +
+        `>  · 👤 User Info - Get any user's ID\n` +
+        `>  · 🆔 My Info - Get your own ID details\n` +
+        `>  · ☎️ Support - Contact developer</blockquote>\n\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
-        ` · 📩 Forward Msg → Get source & media ID\n` +
-        ` · 📷 Send Photo/Video/File/Doc → Choose Cloud Storage (Catbox Permanent / Litterbox 1h, 24h, 48h, 72h) to get Direct Links & Share Bot Deep Links\n` +
-        ` · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
-        ` · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
-        ` · 📄 Send Document → Get file_id & cloud options\n` +
-        ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
+        `>  · 📩 Forward Msg → Get source & media ID\n` +
+        `>  · 📷 Send Photo/Video/File/Doc → Choose Cloud Storage (Catbox Permanent / Litterbox 1h, 24h, 48h, 72h) to get Direct Links & Share Bot Deep Links\n` +
+        `>  · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
+        `>  · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
+        `>  · 📄 Send Document → Get file_id & cloud options\n` +
+        `>  · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
         `<blockquote expandable>🔍 <b>Auto-Detect:</b>\n` +
-        ` · Just type @username in chat\n` +
-        ` · Bot will automatically detect & look up the user info\n` +
-        ` · Works for users, bots, channels & groups!\n` +
-        ` · Up to 3 usernames per message</blockquote>\n\n` +
+        `>  · Just type @username in chat\n` +
+        `>  · Bot will automatically detect & look up the user info\n` +
+        `>  · Works for users, bots, channels & groups!\n` +
+        `>  · Up to 3 usernames per message</blockquote>\n\n` +
         `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
-        ` · Reply /id to any message to get sender's ID\n` +
-        ` · Use buttons for instant one-click ID lookup\n` +
-        ` · Forward from channels to get channel ID\n` +
-        ` · Type @username anywhere — no command needed!</blockquote>\n\n` +
+        `>  · Reply /id to any message to get sender's ID\n` +
+        `>  · Use buttons for instant one-click ID lookup\n` +
+        `>  · Forward from channels to get channel ID\n` +
+        `>  · Type @username anywhere — no command needed!</blockquote>\n\n` +
         `> 📞 Support: @srshihab69\n` +
         `> 🛠️ Made with ❤️ by @sr_shihab69`,
 
@@ -278,6 +278,7 @@ app.post(`/api/webhook`, async (req, res) => {
         if (update.callback_query) {
             const callbackQuery = update.callback_query;
             const msg = callbackQuery.message;
+            if (!msg) return res.status(200).send('OK');
             const chatId = msg.chat.id;
             const data = callbackQuery.data;
 
@@ -293,7 +294,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
                 });
                 await bot.answerCallbackQuery(callbackQuery.id);
-                return;
+                return res.status(200).send('OK');
             }
 
             if (data === 'back_start') {
@@ -308,7 +309,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
                 });
                 await bot.answerCallbackQuery(callbackQuery.id);
-                return;
+                return res.status(200).send('OK');
             }
 
             if (data.startsWith('upload_')) {
@@ -329,7 +330,7 @@ app.post(`/api/webhook`, async (req, res) => {
 
                 if (!fileData) {
                     await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired or file not found. Please resend the file.', show_alert: true });
-                    return;
+                    return res.status(200).send('OK');
                 }
 
                 await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Processing and uploading file to cloud...' });
@@ -407,11 +408,11 @@ app.post(`/api/webhook`, async (req, res) => {
                     });
                 }
             }
-            return;
+            return res.status(200).send('OK');
         }
 
         const msg = update.message;
-        if (!msg) return;
+        if (!msg) return res.status(200).send('OK');
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
@@ -425,15 +426,15 @@ app.post(`/api/webhook`, async (req, res) => {
                 if (param.startsWith('srmeta_') || param === 'sr69') {
                     if (mediaStore.has(param)) {
                         await handleMediaPayload(chatId, mediaStore.get(param));
-                        return;
+                        return res.status(200).send('OK');
                     } else {
                         await bot.sendMessage(chatId, `> ✨ <b>TG Meta69 Bot Media Hub</b>\n\n> Welcome via bot share link! Send any photo, video, or document to generate cloud links.`, { parse_mode: 'HTML' });
-                        return;
+                        return res.status(200).send('OK');
                     }
                 }
             }
             await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
-            return;
+            return res.status(200).send('OK');
         }
         else if (text.startsWith('/srmeta')) {
             const parts = text.split(' ');
@@ -441,7 +442,7 @@ app.post(`/api/webhook`, async (req, res) => {
 
             if (payload && mediaStore.has(payload)) {
                 await handleMediaPayload(chatId, mediaStore.get(payload));
-                return;
+                return res.status(200).send('OK');
             }
 
             await bot.sendMessage(chatId, 
@@ -455,7 +456,7 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text.startsWith('/tiktok')) {
             await bot.sendMessage(chatId, `> 🎵 Send me a TikTok video link 🔗`, { parse_mode: 'HTML' });
-            return;
+            return res.status(200).send('OK');
         }
         else if (text === '/help') {
             await bot.sendMessage(chatId, strings.help, { 
@@ -517,7 +518,7 @@ app.post(`/api/webhook`, async (req, res) => {
 
             if (mediaData) {
                 await handleMediaPayload(chatId, mediaData);
-                return;
+                return res.status(200).send('OK');
             }
 
             await bot.sendMessage(chatId, `> ❌ <b>Link Expired or Not Found</b>\n\n> This browser link has expired or is invalid.`, { parse_mode: 'HTML' });
@@ -568,7 +569,7 @@ app.post(`/api/webhook`, async (req, res) => {
                             filename: 'tiktok_video.mp4',
                             contentType: 'video/mp4'
                         });
-                        return;
+                        return res.status(200).send('OK');
                     } else {
                         await bot.sendMessage(chatId, 
                             `> ⚠️ <b>Video is larger than 30MB!</b>\n\n` +
@@ -583,11 +584,11 @@ app.post(`/api/webhook`, async (req, res) => {
                                 }
                             }
                         );
-                        return;
+                        return res.status(200).send('OK');
                     }
                 } else {
                     await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
-                    return;
+                    return res.status(200).send('OK');
                 }
             } catch (apiErr) {
                 console.error("TikTok Video Error:", apiErr);
@@ -595,7 +596,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
                 }
                 await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
-                return;
+                return res.status(200).send('OK');
             }
         }
         else {
@@ -604,7 +605,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 const payload = matchParam[1];
                 if (mediaStore.has(payload)) {
                     await handleMediaPayload(chatId, mediaStore.get(payload));
-                    return;
+                    return res.status(200).send('OK');
                 }
             }
 
@@ -700,7 +701,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 finalMessage += `\n\n> 💎 <b>Premium Emoji Detected</b>\n<blockquote expandable>`;
                 const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
                 uniqueEmojiIds.forEach((emojiId, index) => {
-                    finalMessage += `🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
+                    finalMessage += `> 🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
                 });
                 finalMessage += `</blockquote>`;
             }
@@ -726,7 +727,7 @@ app.post(`/api/webhook`, async (req, res) => {
 
                         try {
                             const chat = await bot.getChat(target);
-                            lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
+                            lookupResults += `> 👤 <b>${chat.first_name || chat.title}</b>\n> 🆔 ID: <code>${chat.id}</code>\n> 🏷️ User: ${target}\n\n`;
                             
                             if (chat.type === 'private') {
                                 const isBot = target.toLowerCase().endsWith('bot');
@@ -755,6 +756,8 @@ app.post(`/api/webhook`, async (req, res) => {
 
     } catch (err) {
         console.error("Critical Error:", err);
+    } finally {
+        if (!res.headersSent) res.status(200).send('OK');
     }
 });
 
