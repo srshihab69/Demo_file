@@ -84,12 +84,11 @@ const strings = {
         ` · Or reply to a message with /id</blockquote>`,
 
     guide: 
-        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
+        `<blockquote>ℹ️ <b>Unknown Input or Command</b></blockquote>\n\n` +
         `<blockquote>📱 Use keyboard buttons to get IDs\n` +
-        `📎 Send any file to get its file_id\n` +
+        `📎 Send any file to get its secure Telegram Start & Share links\n` +
         `📩 Forward messages to get source ID\n` +
-        `🔗 Send t.me or social media links\n` +
-        `🔍 Type @username to auto-lookup any user</blockquote>`
+        `🔗 Send TikTok or media links</blockquote>`
 };
 
 const mainKeyboard = {
@@ -316,6 +315,61 @@ async function handleMediaPayload(chatId, mediaData, providedPwd = '') {
 app.post(`/api/webhook`, async (req, res) => {
     try {
         const update = req.body;
+
+        // Handle inline button callbacks securely
+        if (update.callback_query) {
+            const callbackQuery = update.callback_query;
+            const msg = callbackQuery.message;
+            if (msg) {
+                const chatId = msg.chat.id;
+                const data = callbackQuery.data;
+
+                if (data === 'help_menu') {
+                    await bot.editMessageText(strings.help, {
+                        chat_id: chatId,
+                        message_id: msg.message_id,
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '🏠 Back to Start', callback_data: 'back_start' }]
+                            ]
+                        }
+                    });
+                    await bot.answerCallbackQuery(callbackQuery.id);
+                } else if (data === 'back_start') {
+                    await bot.editMessageText(strings.welcome(callbackQuery.from.first_name), {
+                        chat_id: chatId,
+                        message_id: msg.message_id,
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'ℹ️ Help Menu', callback_data: 'help_menu' }]
+                            ]
+                        }
+                    });
+                    await bot.answerCallbackQuery(callbackQuery.id);
+                } else if (data.startsWith('pwd_ask_')) {
+                    const origMsgId = data.split('_')[2];
+                    userPasswordInputs.set(chatId, { mode: 'setting_pwd', origMsgId });
+                    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Please type the password in chat.' });
+                    await bot.sendMessage(chatId, `<blockquote>🔐 <b>Set Media Password</b>\n\nPlease type and send the password you want to set for this file.</blockquote>`, { parse_mode: 'HTML' });
+                } else if (data.startsWith('pwd_none_')) {
+                    const origMsgId = data.split('_')[2];
+                    const pendingKey = `${chatId}_${origMsgId}`;
+                    const fileData = pendingUploads.get(pendingKey);
+
+                    if (!fileData) {
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired. Please resend the file.', show_alert: true });
+                    } else {
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Generating Telegram links...' });
+                        await processMediaShare(chatId, fileData, callbackQuery.from, null);
+                    }
+                }
+            }
+            if (!res.headersSent) res.status(200).send('OK');
+            return;
+        }
+
         const msg = update.message;
         if (!msg) return res.status(200).send('OK');
 
@@ -601,6 +655,9 @@ app.post(`/api/webhook`, async (req, res) => {
                         }
                     }
                 );
+            } else if (text && !text.startsWith('/')) {
+                // FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT
+                await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
 
