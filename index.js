@@ -1,4 +1,3 @@
-require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -271,13 +270,11 @@ async function handleMediaPayload(chatId, mediaData) {
 }
 
 app.post(`/api/webhook`, async (req, res) => {
-    // Immediately send 200 OK to Telegram to avoid timeout/retry loop issues, then process asynchronously
     res.status(200).send('OK');
 
     try {
         const update = req.body;
         
-        // Handle Callback Queries (Inline Button Clicks for Cloud Uploads & Menus)
         if (update.callback_query) {
             const callbackQuery = update.callback_query;
             const msg = callbackQuery.message;
@@ -314,7 +311,6 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
 
-            // Handle Cloud Upload Button Actions
             if (data.startsWith('upload_')) {
                 const parts = data.split('_');
                 let uploadType, timeVal, origMsgId;
@@ -373,7 +369,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     mediaStore.set(browserFilename, mediaObject);
                     mediaStore.set(payloadId, mediaObject);
 
-                    const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
+                    const hostUrl = `https://${req.get('host')}`;
                     const browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
 
                     const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
@@ -420,9 +416,8 @@ app.post(`/api/webhook`, async (req, res) => {
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || "";
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
-        const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
+        const hostUrl = `https://${req.get('host')}`;
 
-        // Handle /start with deep link payload
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
             if (parts.length > 1) {
@@ -527,7 +522,6 @@ app.post(`/api/webhook`, async (req, res) => {
 
             await bot.sendMessage(chatId, `> ❌ <b>Link Expired or Not Found</b>\n\n> This browser link has expired or is invalid.`, { parse_mode: 'HTML' });
         }
-        // ================= TIKTOK HANDLER =================
         else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
             let videoDownloadUrl = "";
             let processingMsg = null;
