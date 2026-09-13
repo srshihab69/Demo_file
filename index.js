@@ -208,7 +208,7 @@ app.get('/sr/:filename', async (req, res) => {
         <body>
             <div class="container">
                 <h3 style="margin-top: 5px; color: #f8fafc;">✨ Media Viewer</h3>
-                <div class="media-box">
+                .media-box {
                     ${mediaHtml}
                 </div>
                 <a href="${mediaUrl}" class="download-btn" download>📥 Download File</a>
@@ -270,7 +270,10 @@ async function handleMediaPayload(chatId, mediaData) {
 }
 
 app.post(`/api/webhook`, async (req, res) => {
-    res.status(200).send('OK');
+    // প্রাথমিক সিকিউরিটি ও ভ্যালিডেশন চেক
+    if (!req.body || (!req.body.message && !req.body.callback_query)) {
+        return res.status(200).send('OK');
+    }
 
     try {
         const update = req.body;
@@ -278,14 +281,176 @@ app.post(`/api/webhook`, async (req, res) => {
         if (update.callback_query) {
             const callbackQuery = update.callback_query;
             const msg = callbackQuery.message;
-            if (!msg) return res.status(200).send('OK');
-            const chatId = msg.chat.id;
-            const data = callbackQuery.data;
+            if (msg) {
+                const chatId = msg.chat.id;
+                const data = callbackQuery.data;
 
-            if (data === 'help_menu') {
-                await bot.editMessageText(strings.help, {
-                    chat_id: chatId,
-                    message_id: msg.message_id,
+                if (data === 'help_menu') {
+                    await bot.editMessageText(strings.help, {
+                        chat_id: chatId,
+                        message_id: msg.message_id,
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '🏠 Back to Start', callback_data: 'back_start' }]
+                            ]
+                        }
+                    });
+                    await bot.answerCallbackQuery(callbackQuery.id);
+                } else if (data === 'back_start') {
+                    await bot.editMessageText(strings.welcome(callbackQuery.from.first_name), {
+                        chat_id: chatId,
+                        message_id: msg.message_id,
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: 'ℹ️ Help Menu', callback_data: 'help_menu' }]
+                            ]
+                        }
+                    });
+                    await bot.answerCallbackQuery(callbackQuery.id);
+                } else if (data.startsWith('upload_')) {
+                    const parts = data.split('_');
+                    let uploadType, timeVal, origMsgId;
+
+                    if (parts[1] === 'catbox') {
+                        uploadType = 'catbox';
+                        origMsgId = parts[2];
+                    } else {
+                        uploadType = 'litter';
+                        timeVal = parts[2];
+                        origMsgId = parts[3];
+                    }
+
+                    const pendingKey = `${chatId}_${origMsgId}`;
+                    const fileData = pendingUploads.get(pendingKey);
+
+                    if (!fileData) {
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired or file not found. Please resend the file.', show_alert: true });
+                    } else {
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Processing and uploading file to cloud...' });
+                        await bot.editMessageText(`> 🔄 <b>Uploading file to cloud storage, please wait...</b>`, {
+                            chat_id: chatId,
+                            message_id: msg.message_id,
+                            parse_mode: 'HTML'
+                        });
+
+                        try {
+                            const buffer = await getFileBuffer(fileData.fileId);
+                            let directUrl = '';
+                            const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
+
+                            if (uploadType === 'catbox') {
+                                directUrl = await uploadToCatbox(buffer, fileData.fileName);
+                            } else {
+                                let litterTime = '1h';
+                                if (timeVal === '24') litterTime = '24h';
+                                else if (timeVal === '48') litterTime = '72h';
+                                else if (timeVal === '72') litterTime = '72h';
+                                else if (timeVal === '1') litterTime = '1h';
+
+                                directUrl = await uploadToLitterbox(buffer, fileData.fileName, litterTime);
+                            }
+
+                            pendingUploads.delete(pendingKey);
+
+                            const browserFilename = `sr-${fileData.fileType}-${Math.random().toString(36).substring(2, 9)}`;
+                            const mediaObject = { 
+                                type: 'media', 
+                                url: directUrl, 
+                                fileId: fileData.fileId, 
+                                fileType: fileData.fileType, 
+                                user: callbackQuery.from 
+                            };
+                            mediaStore.set(browserFilename, mediaObject);
+                            mediaStore.set(payloadId, mediaObject);
+
+                            const hostUrl = `https://${req.get('host')}`;
+                            const browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
+
+                            const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
+                            const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
+
+                            const successText = `> ✅ <b>File Uploaded Successfully!</b>\n\n` +
+                                `> ✨ <b>Cloud Direct Link:</b>\n` +
+                                `> 🔗 <code>${directUrl}</code>\n\n` +
+                                `> 🌐 <b>Viewer Link:</b>\n` +
+                                `> 🔗 <code>${browserDirectLink}</code>`;
+
+                            await bot.editMessageText(successText, {
+                                chat_id: chatId,
+                                message_id: msg.message_id,
+                                parse_mode: 'HTML',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: '🌐 Open Browser Link', url: directUrl }
+                                        ],
+                                        [
+                                            { text: '📤 Share Direct Link', url: `https://t.me/share/url?url=${encodeURIComponent(directUrl)}&text=Check%20out%20this%20media%20file!` },
+                                            { text: '🤖 Share Bot Link', url: shareBotLinkUrl }
+                                        ]
+                                    ]
+                                }
+                            });
+
+                        } catch (error) {
+                            console.error('Upload Process Error:', error);
+                            await bot.editMessageText(`> ❌ <b>Upload Failed!</b> Please try again later.`, {
+                                chat_id: chatId,
+                                message_id: msg.message_id,
+                                parse_mode: 'HTML'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        const msg = update.message;
+        if (msg) {
+            const chatId = msg.chat.id;
+            const text = msg.text || msg.caption || "";
+            const entities = (msg.entities || []).concat(msg.caption_entities || []);
+            const hostUrl = `https://${req.get('host')}`;
+
+            if (text.startsWith('/start')) {
+                const parts = text.split(' ');
+                if (parts.length > 1) {
+                    const param = parts[1];
+                    if (param.startsWith('srmeta_') || param === 'sr69') {
+                        if (mediaStore.has(param)) {
+                            await handleMediaPayload(chatId, mediaStore.get(param));
+                        } else {
+                            await bot.sendMessage(chatId, `> ✨ <b>TG Meta69 Bot Media Hub</b>\n\n> Welcome via bot share link! Send any photo, video, or document to generate cloud links.`, { parse_mode: 'HTML' });
+                        }
+                    }
+                } else {
+                    await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+                }
+            }
+            else if (text.startsWith('/srmeta')) {
+                const parts = text.split(' ');
+                const payload = parts[1]; 
+
+                if (payload && mediaStore.has(payload)) {
+                    await handleMediaPayload(chatId, mediaStore.get(payload));
+                } else {
+                    await bot.sendMessage(chatId, 
+                        `> 🔗 <b>Supported Links</b>\n\n` +
+                        `> ├─ 🤖 This bot supports only links generated by the bot itself:\n` +
+                        `> ├─ 🔗 Direct Media Links\n` +
+                        `> └─ 🔗 Shared Media Links\n\n` +
+                        `> ⚠️ Please use a Direct or Share Link.`, 
+                        { parse_mode: 'HTML' }
+                    );
+                }
+            }
+            else if (text.startsWith('/tiktok')) {
+                await bot.sendMessage(chatId, `> 🎵 Send me a TikTok video link 🔗`, { parse_mode: 'HTML' });
+            }
+            else if (text === '/help') {
+                await bot.sendMessage(chatId, strings.help, { 
                     parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
@@ -293,471 +458,295 @@ app.post(`/api/webhook`, async (req, res) => {
                         ]
                     }
                 });
-                await bot.answerCallbackQuery(callbackQuery.id);
-                return res.status(200).send('OK');
             }
-
-            if (data === 'back_start') {
-                await bot.editMessageText(strings.welcome(callbackQuery.from.first_name), {
-                    chat_id: chatId,
-                    message_id: msg.message_id,
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'ℹ️ Help Menu', callback_data: 'help_menu' }]
-                        ]
+            else if (text === '/stat') {
+                const latency = Math.floor(Math.random() * 10) + 40;
+                const effectiveCount = Math.ceil(mediaStore.size / 2);
+                await bot.sendMessage(chatId, strings.stat(effectiveCount, latency), { parse_mode: 'HTML' });
+            }
+            else if (text.startsWith('/id')) {
+                const args = text.split(' ');
+                if (msg.reply_to_message) {
+                    const ruid = msg.reply_to_message.from.id;
+                    await bot.sendMessage(chatId, `> 🆔 <b>Sender ID</b>\n\n> 🆔 User ID: <code>${ruid}</code>`, { parse_mode: 'HTML' });
+                } else if (args.length > 1) {
+                    const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
+                    try {
+                        const chat = await bot.getChat(target);
+                        await bot.sendMessage(chatId, `> 🔍 <b>Lookup Result</b>\n\n> 🆔 ID: <code>${chat.id}</code>\n> 👤 Name: <code>${chat.first_name || chat.title}</code>`, { parse_mode: 'HTML' });
+                    } catch (e) {
+                        await bot.sendMessage(chatId, `> ❌ <b>Error</b>\n\n> Username not found.`, { parse_mode: 'HTML' });
                     }
-                });
-                await bot.answerCallbackQuery(callbackQuery.id);
-                return res.status(200).send('OK');
-            }
-
-            if (data.startsWith('upload_')) {
-                const parts = data.split('_');
-                let uploadType, timeVal, origMsgId;
-
-                if (parts[1] === 'catbox') {
-                    uploadType = 'catbox';
-                    origMsgId = parts[2];
                 } else {
-                    uploadType = 'litter';
-                    timeVal = parts[2];
-                    origMsgId = parts[3];
+                    await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
                 }
-
-                const pendingKey = `${chatId}_${origMsgId}`;
-                const fileData = pendingUploads.get(pendingKey);
-
-                if (!fileData) {
-                    await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired or file not found. Please resend the file.', show_alert: true });
-                    return res.status(200).send('OK');
+            }
+            else if (text === '🆔 My Info') {
+                const u = msg.from;
+                await bot.sendMessage(chatId, `> 🆔 <b>Your Information</b>\n\n` +
+                    `> 🆔 ID: <code>${u.id}</code>\n> 👤 Name: <code>${u.first_name}</code>\n> 🏷️ User: @${u.username || 'N/A'}\n> ⭐ Prem: ${u.is_premium ? '✅' : '❌'}`, { parse_mode: 'HTML' });
+            }
+            else if (text === '☎️ Support') {
+                await bot.sendMessage(chatId, `> 🛡️ <b>Need help or found a bug?</b>\n\n` +
+                    `>  · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
+                    `>  · Contact my developer: <b>@srshihab69</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
+            }
+            else if (msg.user_shared) {
+                const userId = msg.user_shared.user_id;
+                try {
+                    const user = await bot.getChat(userId);
+                    const info = `> 🔍 <b>Shared User Info</b>\n\n` +
+                        `> 🆔 ID: <code>${user.id}</code>\n> 👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n> 🏷️ User: @${user.username || 'None'}\n> ⭐ Prem: ${user.is_premium ? '✅' : '❌'}`;
+                    await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
+                } catch (e) {
+                    await bot.sendMessage(chatId, `> 🔍 <b>Shared User Info</b>\n\n> 🆔 ID: <code>${userId}</code>\n> ⚠️ Details restricted.`, { parse_mode: 'HTML' });
                 }
+            }
+            else if (text.includes(`${hostUrl}/sr/`)) {
+                const trimmedLink = text.trim();
+                const filename = trimmedLink.split('/sr/')[1]?.split(' ')[0];
+                const mediaData = mediaStore.get(filename);
 
-                await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Processing and uploading file to cloud...' });
-                await bot.editMessageText(`> 🔄 <b>Uploading file to cloud storage, please wait...</b>`, {
-                    chat_id: chatId,
-                    message_id: msg.message_id,
-                    parse_mode: 'HTML'
-                });
+                if (mediaData) {
+                    await handleMediaPayload(chatId, mediaData);
+                } else {
+                    await bot.sendMessage(chatId, `> ❌ <b>Link Expired or Not Found</b>\n\n> This browser link has expired or is invalid.`, { parse_mode: 'HTML' });
+                }
+            }
+            else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
+                let videoDownloadUrl = "";
+                let processingMsg = null;
 
                 try {
-                    const buffer = await getFileBuffer(fileData.fileId);
-                    let directUrl = '';
-                    const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
+                    processingMsg = await bot.sendMessage(chatId, `> ⏳ <b>Downloading video...</b>`, { parse_mode: 'HTML' });
 
-                    if (uploadType === 'catbox') {
-                        directUrl = await uploadToCatbox(buffer, fileData.fileName);
-                    } else {
-                        let litterTime = '1h';
-                        if (timeVal === '24') litterTime = '24h';
-                        else if (timeVal === '48') litterTime = '72h';
-                        else if (timeVal === '72') litterTime = '72h';
-                        else if (timeVal === '1') litterTime = '1h';
+                    const urlRegex = /https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/g;
+                    const foundUrls = text.match(urlRegex) || [];
+                    
+                    let targetUrl = foundUrls.find(url => !url.includes('tiktoklite')) || foundUrls[0] || text.trim();
 
-                        directUrl = await uploadToLitterbox(buffer, fileData.fileName, litterTime);
+                    if (targetUrl.includes('?')) {
+                        targetUrl = targetUrl.split('?')[0];
                     }
 
-                    pendingUploads.delete(pendingKey);
-
-                    const browserFilename = `sr-${fileData.fileType}-${Math.random().toString(36).substring(2, 9)}`;
-                    const mediaObject = { 
-                        type: 'media', 
-                        url: directUrl, 
-                        fileId: fileData.fileId, 
-                        fileType: fileData.fileType, 
-                        user: callbackQuery.from 
-                    };
-                    mediaStore.set(browserFilename, mediaObject);
-                    mediaStore.set(payloadId, mediaObject);
-
-                    const hostUrl = `https://${req.get('host')}`;
-                    const browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
-
-                    const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
-                    const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
-
-                    const successText = `> ✅ <b>File Uploaded Successfully!</b>\n\n` +
-                        `> ✨ <b>Cloud Direct Link:</b>\n` +
-                        `> 🔗 <code>${directUrl}</code>\n\n` +
-                        `> 🌐 <b>Viewer Link:</b>\n` +
-                        `> 🔗 <code>${browserDirectLink}</code>`;
-
-                    await bot.editMessageText(successText, {
-                        chat_id: chatId,
-                        message_id: msg.message_id,
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: '🌐 Open Browser Link', url: directUrl }
-                                ],
-                                [
-                                    { text: '📤 Share Direct Link', url: `https://t.me/share/url?url=${encodeURIComponent(directUrl)}&text=Check%20out%20this%20media%20file!` },
-                                    { text: '🤖 Share Bot Link', url: shareBotLinkUrl }
-                                ]
-                            ]
+                    const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                         }
                     });
+                    
+                    const apiData = await apiRes.json();
+                    
+                    if (apiData && apiData.code === 0 && apiData.data) {
+                        videoDownloadUrl = apiData.data.hdplay || apiData.data.play || "";
+                    }
 
-                } catch (error) {
-                    console.error('Upload Process Error:', error);
-                    await bot.editMessageText(`> ❌ <b>Upload Failed!</b> Please try again later.`, {
-                        chat_id: chatId,
-                        message_id: msg.message_id,
-                        parse_mode: 'HTML'
-                    });
-                }
-            }
-            return res.status(200).send('OK');
-        }
+                    if (processingMsg) {
+                        await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+                    }
 
-        const msg = update.message;
-        if (!msg) return res.status(200).send('OK');
+                    if (videoDownloadUrl) {
+                        const videoRes = await fetch(videoDownloadUrl);
+                        const arrayBuffer = await videoRes.arrayBuffer();
+                        const videoBuffer = Buffer.from(arrayBuffer);
+                        const sizeInMB = videoBuffer.length / (1024 * 1024);
 
-        const chatId = msg.chat.id;
-        const text = msg.text || msg.caption || "";
-        const entities = (msg.entities || []).concat(msg.caption_entities || []);
-        const hostUrl = `https://${req.get('host')}`;
-
-        if (text.startsWith('/start')) {
-            const parts = text.split(' ');
-            if (parts.length > 1) {
-                const param = parts[1];
-                if (param.startsWith('srmeta_') || param === 'sr69') {
-                    if (mediaStore.has(param)) {
-                        await handleMediaPayload(chatId, mediaStore.get(param));
-                        return res.status(200).send('OK');
+                        if (sizeInMB <= 30) {
+                            await bot.sendVideo(chatId, videoBuffer, {
+                                caption: `> 📥 <b>Downloaded via TG Meta69 Bot</b>\n> 📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n> 👨‍💻 Developer: @srshihab69`,
+                                parse_mode: 'HTML'
+                            }, {
+                                filename: 'tiktok_video.mp4',
+                                contentType: 'video/mp4'
+                            });
+                        } else {
+                            await bot.sendMessage(chatId, 
+                                `> ⚠️ <b>Video is larger than 30MB!</b>\n\n` +
+                                `> 📊 File Size: <code>${sizeInMB.toFixed(2)} MB</code>\n` +
+                                `> 🔗 Click the button below to download the video directly from the browser. ✅`, 
+                                { 
+                                    parse_mode: 'HTML',
+                                    reply_markup: {
+                                        inline_keyboard: [
+                                            [{ text: `📥 Download HD Video (${sizeInMB.toFixed(1)} MB)`, url: videoDownloadUrl }]
+                                        ]
+                                    }
+                                }
+                            );
+                        }
                     } else {
-                        await bot.sendMessage(chatId, `> ✨ <b>TG Meta69 Bot Media Hub</b>\n\n> Welcome via bot share link! Send any photo, video, or document to generate cloud links.`, { parse_mode: 'HTML' });
-                        return res.status(200).send('OK');
+                        await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
                     }
-                }
-            }
-            await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
-            return res.status(200).send('OK');
-        }
-        else if (text.startsWith('/srmeta')) {
-            const parts = text.split(' ');
-            const payload = parts[1]; 
-
-            if (payload && mediaStore.has(payload)) {
-                await handleMediaPayload(chatId, mediaStore.get(payload));
-                return res.status(200).send('OK');
-            }
-
-            await bot.sendMessage(chatId, 
-                `> 🔗 <b>Supported Links</b>\n\n` +
-                `> ├─ 🤖 This bot supports only links generated by the bot itself:\n` +
-                `> ├─ 🔗 Direct Media Links\n` +
-                `> └─ 🔗 Shared Media Links\n\n` +
-                `> ⚠️ Please use a Direct or Share Link.`, 
-                { parse_mode: 'HTML' }
-            );
-        }
-        else if (text.startsWith('/tiktok')) {
-            await bot.sendMessage(chatId, `> 🎵 Send me a TikTok video link 🔗`, { parse_mode: 'HTML' });
-            return res.status(200).send('OK');
-        }
-        else if (text === '/help') {
-            await bot.sendMessage(chatId, strings.help, { 
-                parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '🏠 Back to Start', callback_data: 'back_start' }]
-                    ]
-                }
-            });
-        }
-        else if (text === '/stat') {
-            const latency = Math.floor(Math.random() * 10) + 40;
-            const effectiveCount = Math.ceil(mediaStore.size / 2);
-            await bot.sendMessage(chatId, strings.stat(effectiveCount, latency), { parse_mode: 'HTML' });
-        }
-        else if (text.startsWith('/id')) {
-            const args = text.split(' ');
-            if (msg.reply_to_message) {
-                const ruid = msg.reply_to_message.from.id;
-                await bot.sendMessage(chatId, `> 🆔 <b>Sender ID</b>\n\n> 🆔 User ID: <code>${ruid}</code>`, { parse_mode: 'HTML' });
-            } else if (args.length > 1) {
-                const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
-                try {
-                    const chat = await bot.getChat(target);
-                    await bot.sendMessage(chatId, `> 🔍 <b>Lookup Result</b>\n\n> 🆔 ID: <code>${chat.id}</code>\n> 👤 Name: <code>${chat.first_name || chat.title}</code>`, { parse_mode: 'HTML' });
-                } catch (e) {
-                    await bot.sendMessage(chatId, `> ❌ <b>Error</b>\n\n> Username not found.`, { parse_mode: 'HTML' });
-                }
-            } else {
-                await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
-            }
-        }
-        else if (text === '🆔 My Info') {
-            const u = msg.from;
-            await bot.sendMessage(chatId, `> 🆔 <b>Your Information</b>\n\n` +
-                `> 🆔 ID: <code>${u.id}</code>\n> 👤 Name: <code>${u.first_name}</code>\n> 🏷️ User: @${u.username || 'N/A'}\n> ⭐ Prem: ${u.is_premium ? '✅' : '❌'}`, { parse_mode: 'HTML' });
-        }
-        else if (text === '☎️ Support') {
-            await bot.sendMessage(chatId, `> 🛡️ <b>Need help or found a bug?</b>\n\n` +
-                `>  · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
-                `>  · Contact my developer: <b>@srshihab69</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
-        }
-        else if (msg.user_shared) {
-            const userId = msg.user_shared.user_id;
-            try {
-                const user = await bot.getChat(userId);
-                const info = `> 🔍 <b>Shared User Info</b>\n\n` +
-                    `> 🆔 ID: <code>${user.id}</code>\n> 👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n> 🏷️ User: @${user.username || 'None'}\n> ⭐ Prem: ${user.is_premium ? '✅' : '❌'}`;
-                await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
-            } catch (e) {
-                await bot.sendMessage(chatId, `> 🔍 <b>Shared User Info</b>\n\n> 🆔 ID: <code>${userId}</code>\n> ⚠️ Details restricted.`, { parse_mode: 'HTML' });
-            }
-        }
-        else if (text.includes(`${hostUrl}/sr/`)) {
-            const trimmedLink = text.trim();
-            const filename = trimmedLink.split('/sr/')[1]?.split(' ')[0];
-            const mediaData = mediaStore.get(filename);
-
-            if (mediaData) {
-                await handleMediaPayload(chatId, mediaData);
-                return res.status(200).send('OK');
-            }
-
-            await bot.sendMessage(chatId, `> ❌ <b>Link Expired or Not Found</b>\n\n> This browser link has expired or is invalid.`, { parse_mode: 'HTML' });
-        }
-        else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
-            let videoDownloadUrl = "";
-            let processingMsg = null;
-
-            try {
-                processingMsg = await bot.sendMessage(chatId, `> ⏳ <b>Downloading video...</b>`, { parse_mode: 'HTML' });
-
-                const urlRegex = /https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/g;
-                const foundUrls = text.match(urlRegex) || [];
-                
-                let targetUrl = foundUrls.find(url => !url.includes('tiktoklite')) || foundUrls[0] || text.trim();
-
-                if (targetUrl.includes('?')) {
-                    targetUrl = targetUrl.split('?')[0];
-                }
-
-                const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                } catch (apiErr) {
+                    console.error("TikTok Video Error:", apiErr);
+                    if (processingMsg) {
+                        await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
                     }
-                });
-                
-                const apiData = await apiRes.json();
-                
-                if (apiData && apiData.code === 0 && apiData.data) {
-                    videoDownloadUrl = apiData.data.hdplay || apiData.data.play || "";
+                    await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
                 }
+            }
+            else {
+                const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
+                if (matchParam) {
+                    const payload = matchParam[1];
+                    if (mediaStore.has(payload)) {
+                        await handleMediaPayload(chatId, mediaStore.get(payload));
+                    }
+                } else {
+                    let finalMessage = "";
+                    let inlineButtons = [];
 
-                if (processingMsg) {
-                    await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
-                }
+                    const isForwarded = Boolean(msg.forward_date || msg.forward_from || msg.forward_from_chat || msg.forward_origin);
 
-                if (videoDownloadUrl) {
-                    const videoRes = await fetch(videoDownloadUrl);
-                    const arrayBuffer = await videoRes.arrayBuffer();
-                    const videoBuffer = Buffer.from(arrayBuffer);
-                    const sizeInMB = videoBuffer.length / (1024 * 1024);
+                    if (isForwarded) {
+                        let fId = 'N/A', fName = 'Protected Source';
+                        if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
+                        else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
+                        else if (msg.forward_origin) {
+                            const o = msg.forward_origin;
+                            fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
+                            fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
+                        }
+                        finalMessage += `> 📩 <b>Forwarded Message</b>\n\n` +
+                            `> 🆔 Source ID: <code>${fId}</code>\n> 👤 Name: <code>${fName}</code>\n\n`;
+                    }
 
-                    if (sizeInMB <= 30) {
-                        await bot.sendVideo(chatId, videoBuffer, {
-                            caption: `> 📥 <b>Downloaded via TG Meta69 Bot</b>\n> 📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n> 👨‍💻 Developer: @srshihab69`,
-                            parse_mode: 'HTML'
-                        }, {
-                            filename: 'tiktok_video.mp4',
-                            contentType: 'video/mp4'
+                    let mId = "", mType = "", mExtra = "";
+                    let fileObj = null;
+                    let fileTypeName = "file";
+
+                    if (msg.photo) {
+                        fileObj = msg.photo[msg.photo.length - 1];
+                        mType = "📷 Photo Detected";
+                        fileTypeName = "photo";
+                        mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                    } else if (msg.video) {
+                        fileObj = msg.video;
+                        mType = "🎬 Video Detected";
+                        fileTypeName = "video";
+                        mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> ⏳ Duration: <code>${fileObj.duration}s</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                    } else if (msg.animation) {
+                        fileObj = msg.animation;
+                        mType = "🎞️ GIF Detected";
+                        fileTypeName = "gif";
+                        mExtra = `\n> 📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                    } else if (msg.sticker) {
+                        fileObj = msg.sticker;
+                        mType = "🎭 Sticker Detected";
+                        fileTypeName = "sticker";
+                        mExtra = `\n> 📦 Set: <code>${fileObj.set_name || 'None'}</code>\n> 😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
+                    } else if (msg.document) {
+                        fileObj = msg.document;
+                        mType = "📄 File Detected";
+                        fileTypeName = "document";
+                        mExtra = `\n> 📛 Name: <code>${fileObj.file_name}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                    } else if (msg.audio) {
+                        fileObj = msg.audio;
+                        mType = "🎵 Audio Detected";
+                        fileTypeName = "audio";
+                        mExtra = `\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                    } else if (msg.voice) {
+                        fileObj = msg.voice;
+                        mType = "🎤 Voice Detected";
+                        fileTypeName = "voice";
+                        mExtra = `\n> ⏳ Duration: <code>${fileObj.duration}s</code>`;
+                    }
+
+                    if (fileObj && fileObj.file_id) {
+                        mId = fileObj.file_id;
+
+                        if (!isForwarded) {
+                            const pendingKey = `${chatId}_${msg.message_id}`;
+                            pendingUploads.set(pendingKey, { fileId: mId, fileName: `${fileTypeName}_file`, fileType: fileTypeName });
+
+                            finalMessage += `> ✨ <b>${mType}</b>\n\n` +
+                                `> 🆔 File ID: <code>${mId}</code>${mExtra}\n\n` +
+                                `> 📂 <b>Please select cloud upload expiration time below:</b>`;
+
+                            inlineButtons.push([
+                                { text: '⏳ Litter (1h)', callback_data: `upload_litter_1_${msg.message_id}` },
+                                { text: '⏳ Litter (24h)', callback_data: `upload_litter_24_${msg.message_id}` }
+                            ]);
+                            inlineButtons.push([
+                                { text: '⏳ Litter (48h)', callback_data: `upload_litter_48_${msg.message_id}` },
+                                { text: '⏳ Litter (72h)', callback_data: `upload_litter_72_${msg.message_id}` }
+                            ]);
+                            inlineButtons.push([
+                                { text: '♾️ Catbox (Permanent)', callback_data: `upload_catbox_${msg.message_id}` }
+                            ]);
+                        } else {
+                            finalMessage += `> ✨ <b>${mType}</b>\n\n` +
+                                `> 🆔 File ID: <code>${mId}</code>${mExtra}`;
+                        }
+                    }
+
+                    const customEmojis = entities.filter(e => e.type === 'custom_emoji');
+                    if (customEmojis.length > 0) {
+                        finalMessage += `\n\n> 💎 <b>Premium Emoji Detected</b>\n<blockquote expandable>`;
+                        const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
+                        uniqueEmojiIds.forEach((emojiId, index) => {
+                            finalMessage += `> 🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
                         });
-                        return res.status(200).send('OK');
-                    } else {
-                        await bot.sendMessage(chatId, 
-                            `> ⚠️ <b>Video is larger than 30MB!</b>\n\n` +
-                            `> 📊 File Size: <code>${sizeInMB.toFixed(2)} MB</code>\n` +
-                            `> 🔗 Click the button below to download the video directly from the browser. ✅`, 
-                            { 
-                                parse_mode: 'HTML',
-                                reply_markup: {
-                                    inline_keyboard: [
-                                        [{ text: `📥 Download HD Video (${sizeInMB.toFixed(1)} MB)`, url: videoDownloadUrl }]
-                                    ]
+                        finalMessage += `</blockquote>`;
+                    }
+
+                    const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
+                    if (lookups.length > 0) {
+                        let lookupResults = "";
+                        let processedTargets = new Set();
+
+                        for (let i = 0; i < lookups.length; i++) {
+                            let target = "";
+                            if (lookups[i].type === 'mention') {
+                                target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length).toLowerCase();
+                            } else if (lookups[i].type === 'url') {
+                                const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                                if (url.includes('t.me/')) {
+                                    target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
                                 }
                             }
-                        );
-                        return res.status(200).send('OK');
-                    }
-                } else {
-                    await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
-                    return res.status(200).send('OK');
-                }
-            } catch (apiErr) {
-                console.error("TikTok Video Error:", apiErr);
-                if (processingMsg) {
-                    await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
-                }
-                await bot.sendMessage(chatId, `> ⚠️ <b>This link is not supported.</b>\n\n> 🔗 <b>Please send a valid link and try again.</b> ✅`, { parse_mode: 'HTML' });
-                return res.status(200).send('OK');
-            }
-        }
-        else {
-            const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
-            if (matchParam) {
-                const payload = matchParam[1];
-                if (mediaStore.has(payload)) {
-                    await handleMediaPayload(chatId, mediaStore.get(payload));
-                    return res.status(200).send('OK');
-                }
-            }
 
-            let finalMessage = "";
-            let inlineButtons = [];
+                            if (target.startsWith('@') && !processedTargets.has(target)) {
+                                processedTargets.add(target);
 
-            const isForwarded = Boolean(msg.forward_date || msg.forward_from || msg.forward_from_chat || msg.forward_origin);
-
-            if (isForwarded) {
-                let fId = 'N/A', fName = 'Protected Source';
-                if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
-                else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
-                else if (msg.forward_origin) {
-                    const o = msg.forward_origin;
-                    fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
-                    fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
-                }
-                finalMessage += `> 📩 <b>Forwarded Message</b>\n\n` +
-                    `> 🆔 Source ID: <code>${fId}</code>\n> 👤 Name: <code>${fName}</code>\n\n`;
-            }
-
-            let mId = "", mType = "", mExtra = "";
-            let fileObj = null;
-            let fileTypeName = "file";
-
-            if (msg.photo) {
-                fileObj = msg.photo[msg.photo.length - 1];
-                mType = "📷 Photo Detected";
-                fileTypeName = "photo";
-                mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-            } else if (msg.video) {
-                fileObj = msg.video;
-                mType = "🎬 Video Detected";
-                fileTypeName = "video";
-                mExtra = `\n> 📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n> ⏳ Duration: <code>${fileObj.duration}s</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-            } else if (msg.animation) {
-                fileObj = msg.animation;
-                mType = "🎞️ GIF Detected";
-                fileTypeName = "gif";
-                mExtra = `\n> 📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-            } else if (msg.sticker) {
-                fileObj = msg.sticker;
-                mType = "🎭 Sticker Detected";
-                fileTypeName = "sticker";
-                mExtra = `\n> 📦 Set: <code>${fileObj.set_name || 'None'}</code>\n> 😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
-            } else if (msg.document) {
-                fileObj = msg.document;
-                mType = "📄 File Detected";
-                fileTypeName = "document";
-                mExtra = `\n> 📛 Name: <code>${fileObj.file_name}</code>\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-            } else if (msg.audio) {
-                fileObj = msg.audio;
-                mType = "🎵 Audio Detected";
-                fileTypeName = "audio";
-                mExtra = `\n> 📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
-            } else if (msg.voice) {
-                fileObj = msg.voice;
-                mType = "🎤 Voice Detected";
-                fileTypeName = "voice";
-                mExtra = `\n> ⏳ Duration: <code>${fileObj.duration}s</code>`;
-            }
-
-            if (fileObj && fileObj.file_id) {
-                mId = fileObj.file_id;
-
-                if (!isForwarded) {
-                    const pendingKey = `${chatId}_${msg.message_id}`;
-                    pendingUploads.set(pendingKey, { fileId: mId, fileName: `${fileTypeName}_file`, fileType: fileTypeName });
-
-                    finalMessage += `> ✨ <b>${mType}</b>\n\n` +
-                        `> 🆔 File ID: <code>${mId}</code>${mExtra}\n\n` +
-                        `> 📂 <b>Please select cloud upload expiration time below:</b>`;
-
-                    inlineButtons.push([
-                        { text: '⏳ Litter (1h)', callback_data: `upload_litter_1_${msg.message_id}` },
-                        { text: '⏳ Litter (24h)', callback_data: `upload_litter_24_${msg.message_id}` }
-                    ]);
-                    inlineButtons.push([
-                        { text: '⏳ Litter (48h)', callback_data: `upload_litter_48_${msg.message_id}` },
-                        { text: '⏳ Litter (72h)', callback_data: `upload_litter_72_${msg.message_id}` }
-                    ]);
-                    inlineButtons.push([
-                        { text: '♾️ Catbox (Permanent)', callback_data: `upload_catbox_${msg.message_id}` }
-                    ]);
-                } else {
-                    finalMessage += `> ✨ <b>${mType}</b>\n\n` +
-                        `> 🆔 File ID: <code>${mId}</code>${mExtra}`;
-                }
-            }
-
-            const customEmojis = entities.filter(e => e.type === 'custom_emoji');
-            if (customEmojis.length > 0) {
-                finalMessage += `\n\n> 💎 <b>Premium Emoji Detected</b>\n<blockquote expandable>`;
-                const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
-                uniqueEmojiIds.forEach((emojiId, index) => {
-                    finalMessage += `> 🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
-                });
-                finalMessage += `</blockquote>`;
-            }
-
-            const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
-            if (lookups.length > 0) {
-                let lookupResults = "";
-                let processedTargets = new Set();
-
-                for (let i = 0; i < lookups.length; i++) {
-                    let target = "";
-                    if (lookups[i].type === 'mention') {
-                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length).toLowerCase();
-                    } else if (lookups[i].type === 'url') {
-                        const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
-                        if (url.includes('t.me/')) {
-                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
+                                try {
+                                    const chat = await bot.getChat(target);
+                                    lookupResults += `> 👤 <b>${chat.first_name || chat.title}</b>\n> 🆔 ID: <code>${chat.id}</code>\n> 🏷️ User: ${target}\n\n`;
+                                    
+                                    if (chat.type === 'private') {
+                                        const isBot = target.toLowerCase().endsWith('bot');
+                                        inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
+                                    } else {
+                                        const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
+                                        inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                        if (lookupResults) {
+                            finalMessage += `\n\n> 🔍 <b>Auto Lookup</b>\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
                         }
                     }
 
-                    if (target.startsWith('@') && !processedTargets.has(target)) {
-                        processedTargets.add(target);
-
-                        try {
-                            const chat = await bot.getChat(target);
-                            lookupResults += `> 👤 <b>${chat.first_name || chat.title}</b>\n> 🆔 ID: <code>${chat.id}</code>\n> 🏷️ User: ${target}\n\n`;
-                            
-                            if (chat.type === 'private') {
-                                const isBot = target.toLowerCase().endsWith('bot');
-                                inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
-                            } else {
-                                const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
-                                inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
-                            }
-                        } catch (e) {}
+                    if (finalMessage) {
+                        await bot.sendMessage(chatId, finalMessage, { 
+                            parse_mode: 'HTML', 
+                            reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
+                        });
+                    } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
+                        await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
                     }
                 }
-                if (lookupResults) {
-                    finalMessage += `\n\n> 🔍 <b>Auto Lookup</b>\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
-                }
-            }
-
-            if (finalMessage) {
-                await bot.sendMessage(chatId, finalMessage, { 
-                    parse_mode: 'HTML', 
-                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
-                });
-            } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
-                await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
 
     } catch (err) {
         console.error("Critical Error:", err);
     } finally {
-        if (!res.headersSent) res.status(200).send('OK');
+        // ফায়ারবেস বা ভেরেল সার্ভার যেন ঘুমিয়ে না পড়ে এবং প্রসেস শেষ হয়ে গেলে ঠিকঠাক স্ট্যাটাস পাঠায়
+        if (!res.headersSent) {
+            res.status(200).send('OK');
+        }
     }
 });
 
