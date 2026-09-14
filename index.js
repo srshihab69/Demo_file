@@ -84,11 +84,12 @@ const strings = {
         ` · Or reply to a message with /id</blockquote>`,
 
     guide: 
-        `<blockquote>ℹ️ <b>Unknown Input or Command</b></blockquote>\n\n` +
+        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
         `<blockquote>📱 Use keyboard buttons to get IDs\n` +
-        `📎 Send any file to get its secure Telegram Start & Share links\n` +
+        `📎 Send any file to get its file_id\n` +
         `📩 Forward messages to get source ID\n` +
-        `🔗 Send TikTok or media links</blockquote>`
+        `🔗 Send t.me or social media links\n` +
+        `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
 const mainKeyboard = {
@@ -239,7 +240,7 @@ app.get('/sr/:filename', async (req, res) => {
 });
 
 // Helper function to handle media retrieval with 3-Attempt Bot Password Check
-async function handleMediaPayload(chatId, mediaData, providedPwd = '') {
+async function handleMediaPayload(chatId, mediaData, providedPwd = '', promptMessageId = null) {
     if (mediaData) {
         const browserFilename = mediaData.browserFilename;
         const reqPwd = browserFilename ? mediaPasswords.get(browserFilename) : null;
@@ -258,12 +259,23 @@ async function handleMediaPayload(chatId, mediaData, providedPwd = '') {
             failedPasswordAttempts.set(attemptKey, currentTries);
             const remainingTries = 3 - currentTries;
 
+            // Delete previous prompt message to keep chat clean if requested
+            if (promptMessageId) {
+                await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
+            }
+
             await bot.sendMessage(chatId, `<blockquote>🔒 <b>Password Required</b>\n\nThis media is protected with a password. Please type and send the correct password in chat.\n⚠️ <i>(${remainingTries} attempt(s) remaining before access is permanently blocked)</i></blockquote>`, { parse_mode: 'HTML' });
             return false;
         }
 
-        // Reset attempts on successful entry
+        // Reset attempts and clean state on successful entry
         failedPasswordAttempts.delete(attemptKey);
+        userPasswordInputs.delete(chatId);
+
+        // Delete previous prompt message if successful
+        if (promptMessageId) {
+            await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
+        }
 
         const generatorName = mediaData.user ? (mediaData.user.first_name || 'Unknown User') : 'Unknown User';
         const generatorId = mediaData.user ? mediaData.user.id : 'N/A';
@@ -352,6 +364,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     const origMsgId = data.split('_')[2];
                     userPasswordInputs.set(chatId, { mode: 'setting_pwd', origMsgId });
                     await bot.answerCallbackQuery(callbackQuery.id, { text: 'Please type the password in chat.' });
+                    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
                     await bot.sendMessage(chatId, `<blockquote>🔐 <b>Set Media Password</b>\n\nPlease type and send the password you want to set for this file.</blockquote>`, { parse_mode: 'HTML' });
                 } else if (data.startsWith('pwd_none_')) {
                     const origMsgId = data.split('_')[2];
@@ -362,6 +375,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired. Please resend the file.', show_alert: true });
                     } else {
                         await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Generating Telegram links...' });
+                        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
                         await processMediaShare(chatId, fileData, callbackQuery.from, null);
                     }
                 }
@@ -396,7 +410,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 return res.status(200).send('OK');
             } else if (state.browserFilename && state.mediaData) {
                 const password = text.trim();
-                await handleMediaPayload(chatId, state.mediaData, password);
+                await handleMediaPayload(chatId, state.mediaData, password, msg.message_id);
                 return res.status(200).send('OK');
             }
         }
@@ -656,7 +670,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
                 );
             } else if (text && !text.startsWith('/')) {
-                // FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT
+                // FIXED: FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT (PIC 1 FIX)
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
@@ -711,7 +725,7 @@ async function processMediaShare(chatId, fileData, userObj, password) {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '🤖 Open / Share Bot Link', url: shareBotLinkUrl }
+                        { text: '📤 Share Link', switch_inline_query: shareBotLinkUrl }
                     ]
                 ]
             }
