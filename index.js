@@ -21,7 +21,7 @@ const mediaStore = new Map();
 const pendingUploads = new Map();
 const mediaPasswords = new Map();
 const userPasswordInputs = new Map();
-const failedPasswordAttempts = new Map(); // Tracks wrong password tries per user/chat
+const failedPasswordAttempts = new Map();
 
 const formatSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -259,7 +259,6 @@ async function handleMediaPayload(chatId, mediaData, providedPwd = '', promptMes
             failedPasswordAttempts.set(attemptKey, currentTries);
             const remainingTries = 3 - currentTries;
 
-            // Delete previous prompt message to keep chat clean if requested
             if (promptMessageId) {
                 await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
             }
@@ -268,11 +267,10 @@ async function handleMediaPayload(chatId, mediaData, providedPwd = '', promptMes
             return false;
         }
 
-        // Reset attempts and clean state on successful entry
+        // Reset attempts on successful entry
         failedPasswordAttempts.delete(attemptKey);
         userPasswordInputs.delete(chatId);
 
-        // Delete previous prompt message if successful
         if (promptMessageId) {
             await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
         }
@@ -374,7 +372,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     if (!fileData) {
                         await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired. Please resend the file.', show_alert: true });
                     } else {
-                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Generating Telegram links...' });
+                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Generating links...' });
                         await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
                         await processMediaShare(chatId, fileData, callbackQuery.from, null);
                     }
@@ -415,7 +413,7 @@ app.post(`/api/webhook`, async (req, res) => {
             }
         }
 
-        // Handle /start with deep link payload (e.g., /start srmeta_xxxx)
+        // Handle /start with deep link payload
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
             if (parts.length > 1 && parts[1].startsWith('srmeta_')) {
@@ -670,7 +668,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     }
                 );
             } else if (text && !text.startsWith('/')) {
-                // FIXED: FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT (PIC 1 FIX)
+                // FIXED: FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
@@ -714,11 +712,11 @@ async function processMediaShare(chatId, fileData, userObj, password) {
 
         const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
         const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
+        const directBrowserLink = `https://${process.env.RENDER_EXTERNAL_URL ? new URL(process.env.RENDER_EXTERNAL_URL).host : 'yourdomain.com'}/sr/${browserFilename}`;
 
-        const successText = `<blockquote>✅ <b>Telegram Share Link Generated Successfully!</b>\n\n` +
-            (password ? `🔒 <b>Status:</b> Password Protected\n\n` : `🔓 <b>Status:</b> Unprotected\n\n`) +
-            `✨ <b>Bot Start / Share Link:</b>\n` +
-            `🔗 <code>${shareBotLinkUrl}</code></blockquote>`;
+        const successText = `<blockquote>✨ <b>Media Detected Successfully!</b></blockquote>\n\n` +
+            `<blockquote>🆔 File ID: <code>${fileData.fileId}</code>\n` +
+            `🔗 Direct Link : <code>${directBrowserLink}</code></blockquote>`;
 
         await bot.sendMessage(chatId, successText, {
             parse_mode: 'HTML',
