@@ -16,12 +16,7 @@ bot.getMe().then(me => {
 const app = express();
 app.use(bodyParser.json());
 
-// In-memory stores for media, sessions, passwords, and failed attempts tracking
 const mediaStore = new Map();
-const pendingUploads = new Map();
-const mediaPasswords = new Map();
-const userPasswordInputs = new Map();
-const failedPasswordAttempts = new Map();
 
 const formatSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -34,7 +29,7 @@ const formatSize = (bytes) => {
 const strings = {
     welcome: (name) => 
         `<blockquote>👋 <b>Hello, ${name}!</b></blockquote>\n` +
-        `<blockquote>Welcome to <b>TG Meta69 Bot!</b> Explore user & media information, manage media tools with strict password security, and download TikTok videos with ease. 🚀</blockquote>`,
+        `<blockquote>Welcome to <b>TG Meta69 Bot!</b> Explore user & media information, manage media tools, and download TikTok videos with ease. 🚀</blockquote>`,
     
     help: 
         `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n` +
@@ -50,8 +45,8 @@ const strings = {
         ` · 🆔 My Info - Get your own ID details\n` +
         ` · ☎️ Support - Contact developer</blockquote>\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
-        ` · 📩 Forward Msg → Get source & media ID (No links/buttons generated for forwarded media)\n` +
-        ` · 📷 Send Photo/Video → Get Browser Direct Link & Share Deep Link with 3-Attempt Password Security\n` +
+        ` · 📩 Forward Msg → Get source & media ID\n` +
+        ` · 📷 Send Photo/Video → Get Browser Direct Link & Share Deep Link\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
         ` · 📄 Send Document → Get file_id\n` +
@@ -67,7 +62,7 @@ const strings = {
         ` · Forward from channels to get channel ID\n` +
         ` · Type @username anywhere — no command needed!</blockquote>\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
-        `🛠️ Made with ❤️ by @sr_shihab69</blockquote>`,
+        `🛠️ Made with ❤️ by @srshihab69</blockquote>`,
 
     stat: (mediaCount, lat) => 
         `<blockquote>📊 <b>Bot Statistics & Status</b></blockquote>\n` +
@@ -103,7 +98,7 @@ const mainKeyboard = {
     parse_mode: 'HTML'
 };
 
-// Express route for browser media viewer with 3-Attempt Password Check
+// Express route for browser media viewer
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
     const mediaData = mediaStore.get(filename);
@@ -125,71 +120,6 @@ app.get('/sr/:filename', async (req, res) => {
                 <div class="container">
                     <h3>❌ Link Expired or Not Found</h3>
                     <p>This media link has expired or is invalid. Please send the link/media to the bot again to get a fresh link.</p>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-
-    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    const attemptKey = `web_${filename}_${clientIp}`;
-    const failedTries = failedPasswordAttempts.get(attemptKey) || 0;
-
-    if (failedTries >= 3) {
-        return res.status(403).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Access Denied - TG Meta69 Bot</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    body { font-family: Arial, sans-serif; background: #0f172a; color: #f87171; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                    .container { text-align: center; max-width: 500px; width: 90%; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-                    p { color: #94a3b8; font-size: 15px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h3>⛔ ACCESS DENIED</h3>
-                    <p>You have entered the wrong password 3 times. Access to this media has been blocked for security reasons.</p>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-
-    const requiredPassword = mediaPasswords.get(filename);
-    const providedPassword = req.query.pwd || '';
-
-    if (requiredPassword && providedPassword !== requiredPassword) {
-        const currentTries = failedTries + 1;
-        failedPasswordAttempts.set(attemptKey, currentTries);
-        const remainingTries = 3 - currentTries;
-
-        return res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Password Protected - TG Meta69 Bot</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
-                    .container { text-align: center; max-width: 400px; width: 100%; background: #1e293b; padding: 25px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
-                    input { width: 80%; padding: 12px; font-size: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; margin-bottom: 15px; outline: none; }
-                    button { background: #38bdf8; color: #0f172a; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
-                    button:hover { background: #0ea5e9; }
-                    .error { color: #f87171; font-size: 13px; margin-top: 10px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h3>🔒 Password Protected Media</h3>
-                    <p style="color: #94a3b8; font-size: 14px;">Please enter the password to view this file. (${remainingTries} attempt(s) remaining)</p>
-                    <form method="GET" action="">
-                        <input type="password" name="pwd" placeholder="Enter password..." required autofocus /><br>
-                        <button type="submit">Unlock Media</button>
-                    </form>
-                    ${providedPassword ? `<div class="error">Incorrect Password! ${remainingTries} attempt(s) left.</div>` : ''}
                 </div>
             </body>
             </html>
@@ -239,48 +169,15 @@ app.get('/sr/:filename', async (req, res) => {
     `);
 });
 
-// Helper function to handle media retrieval with 3-Attempt Bot Password Check
-async function handleMediaPayload(chatId, mediaData, providedPwd = '', promptMessageId = null) {
+// Helper function to handle media retrieval from payload/link
+async function handleMediaPayload(chatId, mediaData) {
     if (mediaData) {
-        const browserFilename = mediaData.browserFilename;
-        const reqPwd = browserFilename ? mediaPasswords.get(browserFilename) : null;
-
-        const attemptKey = `bot_${chatId}_${browserFilename}`;
-        const failedTries = failedPasswordAttempts.get(attemptKey) || 0;
-
-        if (failedTries >= 3) {
-            await bot.sendMessage(chatId, `<blockquote>⛔ <b>ACCESS DENIED</b>\n\nYou have entered the wrong password 3 times. Access to this media has been blocked for security reasons.</blockquote>`, { parse_mode: 'HTML' });
-            return false;
-        }
-
-        if (reqPwd && providedPwd !== reqPwd) {
-            userPasswordInputs.set(chatId, { browserFilename, mediaData });
-            const currentTries = failedTries + 1;
-            failedPasswordAttempts.set(attemptKey, currentTries);
-            const remainingTries = 3 - currentTries;
-
-            if (promptMessageId) {
-                await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
-            }
-
-            await bot.sendMessage(chatId, `<blockquote>🔒 <b>Password Required</b>\n\nThis media is protected with a password. Please type and send the correct password in chat.\n⚠️ <i>(${remainingTries} attempt(s) remaining before access is permanently blocked)</i></blockquote>`, { parse_mode: 'HTML' });
-            return false;
-        }
-
-        // Reset attempts on successful entry
-        failedPasswordAttempts.delete(attemptKey);
-        userPasswordInputs.delete(chatId);
-
-        if (promptMessageId) {
-            await bot.deleteMessage(chatId, promptMessageId).catch(() => {});
-        }
-
         const generatorName = mediaData.user ? (mediaData.user.first_name || 'Unknown User') : 'Unknown User';
         const generatorId = mediaData.user ? mediaData.user.id : 'N/A';
         const generatorUsername = mediaData.user && mediaData.user.username ? `@${mediaData.user.username}` : 'No Username';
         const userLinkHtml = mediaData.user && mediaData.user.username ? `<a href="t.me/${mediaData.user.username}">${generatorName}</a>` : `<code>${generatorName}</code>`;
 
-        const headerText = `<blockquote>👤 <b>Generated By:</b> ${userLinkHtml}\n🆔 ID: <code>${generatorId}</code>\n🏷️ Username: ${generatorUsername}</blockquote>\n\n`;
+        const headerText = `<blockquote>👤 <b>Generated By:</b> ${userLinkHtml}\n🆔 ID: <code>${generatorId}</code>\n🏷️ Username: ${generatorUsername}</blockquote>\n`;
 
         if (mediaData.fileType === 'photo' && mediaData.fileId) {
             await bot.sendPhoto(chatId, mediaData.fileId, {
@@ -318,70 +215,13 @@ async function handleMediaPayload(chatId, mediaData, providedPwd = '', promptMes
         }
     }
 
-    await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This media link has expired or is invalid. Please send the media to the bot again to get a fresh link.</blockquote>`, { parse_mode: 'HTML' });
+    await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n` + `<blockquote>This media link has expired or is invalid. Please send the media to the bot again to get a fresh link.</blockquote>`, { parse_mode: 'HTML' });
     return false;
 }
 
 app.post(`/api/webhook`, async (req, res) => {
     try {
         const update = req.body;
-
-        // Handle inline button callbacks securely
-        if (update.callback_query) {
-            const callbackQuery = update.callback_query;
-            const msg = callbackQuery.message;
-            if (msg) {
-                const chatId = msg.chat.id;
-                const data = callbackQuery.data;
-
-                if (data === 'help_menu') {
-                    await bot.editMessageText(strings.help, {
-                        chat_id: chatId,
-                        message_id: msg.message_id,
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: '🏠 Back to Start', callback_data: 'back_start' }]
-                            ]
-                        }
-                    });
-                    await bot.answerCallbackQuery(callbackQuery.id);
-                } else if (data === 'back_start') {
-                    await bot.editMessageText(strings.welcome(callbackQuery.from.first_name), {
-                        chat_id: chatId,
-                        message_id: msg.message_id,
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: 'ℹ️ Help Menu', callback_data: 'help_menu' }]
-                            ]
-                        }
-                    });
-                    await bot.answerCallbackQuery(callbackQuery.id);
-                } else if (data.startsWith('pwd_ask_')) {
-                    const origMsgId = data.split('_')[2];
-                    userPasswordInputs.set(chatId, { mode: 'setting_pwd', origMsgId });
-                    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Please type the password in chat.' });
-                    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-                    await bot.sendMessage(chatId, `<blockquote>🔐 <b>Set Media Password</b>\n\nPlease type and send the password you want to set for this file.</blockquote>`, { parse_mode: 'HTML' });
-                } else if (data.startsWith('pwd_none_')) {
-                    const origMsgId = data.split('_')[2];
-                    const pendingKey = `${chatId}_${origMsgId}`;
-                    const fileData = pendingUploads.get(pendingKey);
-
-                    if (!fileData) {
-                        await bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Session expired. Please resend the file.', show_alert: true });
-                    } else {
-                        await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ Generating links...' });
-                        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-                        await processMediaShare(chatId, fileData, callbackQuery.from, null);
-                    }
-                }
-            }
-            if (!res.headersSent) res.status(200).send('OK');
-            return;
-        }
-
         const msg = update.message;
         if (!msg) return res.status(200).send('OK');
 
@@ -390,30 +230,7 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
-        // Handle password input inside chat
-        if (userPasswordInputs.has(chatId) && text && !text.startsWith('/')) {
-            const state = userPasswordInputs.get(chatId);
-            if (state.mode === 'setting_pwd') {
-                const password = text.trim();
-                const pendingKey = `${chatId}_${state.origMsgId}`;
-                const fileData = pendingUploads.get(pendingKey);
-                userPasswordInputs.delete(chatId);
-
-                if (!fileData) {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Session Expired.</b> Please resend the file.</blockquote>`, { parse_mode: 'HTML' });
-                } else {
-                    await bot.sendMessage(chatId, `<blockquote>⏳ <b>Generating password-protected links...</b></blockquote>`, { parse_mode: 'HTML' });
-                    await processMediaShare(chatId, fileData, msg.from, password);
-                }
-                return res.status(200).send('OK');
-            } else if (state.browserFilename && state.mediaData) {
-                const password = text.trim();
-                await handleMediaPayload(chatId, state.mediaData, password, msg.message_id);
-                return res.status(200).send('OK');
-            }
-        }
-
-        // Handle /start with deep link payload
+        // Handle /start with deep link payload (e.g., /start srmeta_xxxx)
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
             if (parts.length > 1 && parts[1].startsWith('srmeta_')) {
@@ -422,7 +239,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     await handleMediaPayload(chatId, mediaStore.get(payload));
                     return;
                 } else {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This media link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n` + `<blockquote>This media link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
                     return;
                 }
             } else {
@@ -464,14 +281,14 @@ app.post(`/api/webhook`, async (req, res) => {
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
-                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n\n<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n` + `<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { parse_mode: 'HTML' });
             } else if (args.length > 1) {
                 const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
                 try {
                     const chat = await bot.getChat(target);
-                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n\n<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n` + `<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { parse_mode: 'HTML' });
                 } catch (e) {
-                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n\n<blockquote>Username not found.</blockquote>`, { parse_mode: 'HTML' });
+                    await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n` + `<blockquote>Username not found.</blockquote>`, { parse_mode: 'HTML' });
                 }
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
@@ -479,11 +296,11 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text === '🆔 My Info') {
             const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n\n` +
+            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n` +
                 `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '☎️ Support') {
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n\n` +
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n` +
                 `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
                 ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
@@ -491,11 +308,11 @@ app.post(`/api/webhook`, async (req, res) => {
             const userId = msg.user_shared.user_id;
             try {
                 const user = await bot.getChat(userId);
-                const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n` +
+                const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n` +
                     `<blockquote>🆔 ID: <code>${user.id}</code>\n👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n🏷️ User: @${user.username || 'None'}\n⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
                 await bot.sendMessage(chatId, info, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '💬 Message', url: user.username ? `t.me/${user.username}` : `tg://user?id=${user.id}` }]] } });
             } catch (e) {
-                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n\n<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n` + `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, { parse_mode: 'HTML' });
             }
         }
         else if (text.includes(`${hostUrl}/sr/`)) {
@@ -508,14 +325,15 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
 
-            await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n\n<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n` + `<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
-        // ================= TIKTOK HANDLER (BUFFER + 30MB CHECK) =================
+        // ================= HIGH FILTERED TIKTOK HANDLER (30MB LIMIT + SHORT TEXT) =================
         else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
             let videoDownloadUrl = "";
             let processingMsg = null;
 
             try {
+                // Short single-line processing text
                 processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video...</b>`, { parse_mode: 'HTML' });
 
                 const urlRegex = /https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/g;
@@ -528,7 +346,9 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
 
                 const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                    }
                 });
                 
                 const apiData = await apiRes.json();
@@ -547,6 +367,9 @@ app.post(`/api/webhook`, async (req, res) => {
                     const videoBuffer = Buffer.from(arrayBuffer);
                     const sizeInMB = videoBuffer.length / (1024 * 1024);
 
+                    console.log(`TikTok Video Size: ${sizeInMB.toFixed(2)} MB`);
+
+                    // If size is 30MB or less, send video directly to chat
                     if (sizeInMB <= 30) {
                         await bot.sendVideo(chatId, videoBuffer, {
                             caption: `📥 <b>Downloaded via TG Meta69 Bot</b>\n📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n👨‍💻 Developer: @srshihab69`,
@@ -557,8 +380,9 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
+                        // If size is greater than 30MB, send inline button
                         await bot.sendMessage(chatId, 
-                            `<blockquote>⚠️ <b>Video is larger than 30MB!</b></blockquote>\n\n` +
+                            `<blockquote>⚠️ <b>Video is larger than 30MB!</b></blockquote>\n` +
                             `<blockquote>📊 File Size: <code>${sizeInMB.toFixed(2)} MB</code>\n` +
                             `🔗 Click the button below to download the video directly from the browser. ✅</blockquote>`, 
                             { 
@@ -585,12 +409,21 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
         }
-        // =======================================================================
+        // ==============================================================================
         else {
-            const isForwarded = Boolean(msg.forward_date || msg.forward_from || msg.forward_from_chat || msg.forward_origin);
+            const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
+            if (matchParam) {
+                const payload = matchParam[1];
+                if (mediaStore.has(payload)) {
+                    await handleMediaPayload(chatId, mediaStore.get(payload));
+                    return;
+                }
+            }
 
-            // ================= FORWARDED MEDIA HANDLER (NO LINKS / NO BUTTONS) =================
-            if (isForwarded) {
+            let finalMessage = "";
+            let inlineButtons = [];
+
+            if (msg.forward_from || msg.forward_from_chat || msg.forward_origin) {
                 let fId = 'N/A', fName = 'Protected Source';
                 if (msg.forward_from) { fId = msg.forward_from.id; fName = msg.forward_from.first_name; }
                 else if (msg.forward_from_chat) { fId = msg.forward_from_chat.id; fName = msg.forward_from_chat.title; }
@@ -599,76 +432,149 @@ app.post(`/api/webhook`, async (req, res) => {
                     fId = o.sender_user ? o.sender_user.id : (o.chat ? o.chat.id : 'Hidden');
                     fName = o.sender_user ? o.sender_user.first_name : (o.chat ? o.chat.title : 'Forwarded Source');
                 }
+                finalMessage += `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n` +
+                    `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n`;
+            }
 
+            let mId = "", mType = "", mExtra = "";
+            let browserDirectLink = "";
+            let shareDeepLink = "";
+
+            if (msg.photo || msg.video || msg.animation || msg.document || msg.audio || msg.voice) {
                 let fileObj = null;
-                let mType = "Forwarded Media";
-                let mExtra = "";
-
-                if (msg.photo) { fileObj = msg.photo[msg.photo.length - 1]; mType = "📷 Forwarded Photo"; mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`; }
-                else if (msg.video) { fileObj = msg.video; mType = "🎬 Forwarded Video"; mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n⏳ Duration: <code>${fileObj.duration}s</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`; }
-                else if (msg.document) { fileObj = msg.document; mType = "📄 Forwarded Document"; mExtra = `\n📛 Name: <code>${fileObj.file_name}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`; }
-                else if (msg.audio) { fileObj = msg.audio; mType = "🎵 Forwarded Audio"; mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`; }
-                else if (msg.voice) { fileObj = msg.voice; mType = "🎤 Forwarded Voice"; mExtra = `\n⏳ Duration: <code>${fileObj.duration}s</code>`; }
-
-                let fwdMsgText = `<blockquote>📩 <b>Forwarded Message</b></blockquote>\n\n` +
-                    `<blockquote>🆔 Source ID: <code>${fId}</code>\n👤 Name: <code>${fName}</code></blockquote>\n\n`;
-
-                if (fileObj && fileObj.file_id) {
-                    fwdMsgText += `<blockquote>✨ <b>${mType}</b></blockquote>\n\n` +
-                        `<blockquote>🆔 File ID: <code>${fileObj.file_id}</code>${mExtra}</blockquote>`;
-                } else {
-                    fwdMsgText += `<blockquote>💬 <b>Text:</b> ${text}</blockquote>`;
+                let fileTypeName = "file";
+                if (msg.photo) {
+                    fileObj = msg.photo[msg.photo.length - 1];
+                    mType = "📷 Photo Detected";
+                    fileTypeName = "photo";
+                    mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.video) {
+                    fileObj = msg.video;
+                    mType = "🎬 Video Detected";
+                    fileTypeName = "video";
+                    mExtra = `\n📐 Res: <code>${fileObj.width}x${fileObj.height}</code>\n⏳ Duration: <code>${fileObj.duration}s</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.animation) {
+                    fileObj = msg.animation;
+                    mType = "🎞️ GIF Detected";
+                    fileTypeName = "gif";
+                    mExtra = `\n📛 Name: <code>${fileObj.file_name || 'Animation'}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.sticker) {
+                    fileObj = msg.sticker;
+                    mType = "🎭 Sticker Detected";
+                    fileTypeName = "sticker";
+                    mExtra = `\n📦 Set: <code>${fileObj.set_name || 'None'}</code>\n😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
+                } else if (msg.document) {
+                    fileObj = msg.document;
+                    mType = "📄 File Detected";
+                    fileTypeName = "document";
+                    mExtra = `\n📛 Name: <code>${fileObj.file_name}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.audio) {
+                    fileObj = msg.audio;
+                    mType = "🎵 Audio Detected";
+                    fileTypeName = "audio";
+                    mExtra = `\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
+                } else if (msg.voice) {
+                    fileObj = msg.voice;
+                    mType = "🎤 Voice Detected";
+                    fileTypeName = "voice";
+                    mExtra = `\n⏳ Duration: <code>${fileObj.duration}s</code>`;
                 }
 
-                await bot.sendMessage(chatId, fwdMsgText, { parse_mode: 'HTML' });
-                return res.status(200).send('OK');
+                if (fileObj && fileObj.file_id) {
+                    mId = fileObj.file_id;
+                    const browserFilename = `sr-${fileTypeName}-${Math.random().toString(36).substring(2, 9)}`;
+                    const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
+                    
+                    let teleLink = "";
+                    try {
+                        const fileInfo = await bot.getFile(mId);
+                        if (fileInfo && fileInfo.file_path) {
+                            teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+                        }
+                    } catch (e) {}
+
+                    const mediaObject = { 
+                        type: 'media', 
+                        url: teleLink, 
+                        fileId: mId, 
+                        fileType: fileTypeName, 
+                        user: msg.from 
+                    };
+
+                    mediaStore.set(browserFilename, mediaObject);
+                    mediaStore.set(payloadId, mediaObject);
+
+                    browserDirectLink = `${hostUrl}/sr/${browserFilename}`;
+
+                    const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
+                    shareDeepLink = `https://t.me/${currentBotUser}?start=${payloadId}`;
+                }
+
+                finalMessage += `<blockquote>✨ <b>${mType}</b></blockquote>\n` +
+                    `<blockquote>🆔 File ID: <code>${mId}</code>${mExtra}\n🔗 Direct Link : <code>${browserDirectLink}</code></blockquote>\n`;
+                
+                if (shareDeepLink) {
+                    inlineButtons.push([{ text: '📤 Share Link', switch_inline_query: shareDeepLink }]);
+                }
             }
-            // ===================================================================================
 
-            let fileObj = null;
-            let fileTypeName = "file";
-
-            if (msg.photo) {
-                fileObj = msg.photo[msg.photo.length - 1];
-                fileTypeName = "photo";
-            } else if (msg.video) {
-                fileObj = msg.video;
-                fileTypeName = "video";
-            } else if (msg.animation) {
-                fileObj = msg.animation;
-                fileTypeName = "gif";
-            } else if (msg.sticker) {
-                fileObj = msg.sticker;
-                fileTypeName = "sticker";
-            } else if (msg.document) {
-                fileObj = msg.document;
-                fileTypeName = "document";
-            } else if (msg.audio) {
-                fileObj = msg.audio;
-                fileTypeName = "audio";
-            } else if (msg.voice) {
-                fileObj = msg.voice;
-                fileTypeName = "voice";
+            const customEmojis = entities.filter(e => e.type === 'custom_emoji');
+            if (customEmojis.length > 0) {
+                finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n<blockquote expandable>`;
+                
+                // Show unique emojis only once
+                const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
+                
+                uniqueEmojiIds.forEach((emojiId, index) => {
+                    finalMessage += `🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
+                });
+                finalMessage += `</blockquote>\n`;
             }
 
-            if (fileObj && fileObj.file_id) {
-                const pendingKey = `${chatId}_${msg.message_id}`;
-                pendingUploads.set(pendingKey, { fileId: fileObj.file_id, fileName: `${fileTypeName}_file`, fileType: fileTypeName });
+            const lookups = entities.filter(e => e.type === 'mention' || e.type === 'url');
+            if (lookups.length > 0) {
+                let lookupResults = "";
+                let processedTargets = new Set();
 
-                await bot.sendMessage(chatId, 
-                    `<blockquote>✨ <b>Media Detected Successfully!</b>\n\n🔐 <b>Do you want to secure this media with a password?</b></blockquote>`, 
-                    {
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: '🔒 Set Password', callback_data: `pwd_ask_${msg.message_id}` }],
-                                [{ text: '🔓 No Password (Unprotected)', callback_data: `pwd_none_${msg.message_id}` }]
-                            ]
+                for (let i = 0; i < lookups.length; i++) {
+                    let target = "";
+                    if (lookups[i].type === 'mention') {
+                        target = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length).toLowerCase();
+                    } else if (lookups[i].type === 'url') {
+                        const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
+                        if (url.includes('t.me/')) {
+                            target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
                         }
                     }
-                );
-            } else if (text && !text.startsWith('/')) {
-                // FIXED: FALLBACK FOR UNKNOWN TEXT OR COMMAND INPUT
+
+                    if (target.startsWith('@') && !processedTargets.has(target)) {
+                        processedTargets.add(target);
+
+                        try {
+                            const chat = await bot.getChat(target);
+                            lookupResults += `👤 <b>${chat.first_name || chat.title}</b>\n🆔 ID: <code>${chat.id}</code>\n🏷️ User: ${target}\n\n`;
+                            
+                            if (chat.type === 'private') {
+                                const isBot = target.toLowerCase().endsWith('bot');
+                                inlineButtons.push([{ text: isBot ? `🤖 Start ${chat.first_name}` : `💬 Message ${chat.first_name}`, url: `t.me/${chat.username}` }]);
+                            } else {
+                                const btnText = chat.type === 'channel' ? "📢 Join Channel" : "👥 Join Group";
+                                inlineButtons.push([{ text: btnText, url: `t.me/${chat.username}` }]);
+                            }
+                        } catch (e) {}
+                    }
+                }
+                if (lookupResults) {
+                    finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
+                }
+            }
+
+            if (finalMessage) {
+                await bot.sendMessage(chatId, finalMessage, { 
+                    parse_mode: 'HTML', 
+                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
+                });
+            } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
                 await bot.sendMessage(chatId, strings.guide, { parse_mode: 'HTML' });
             }
         }
@@ -679,60 +585,6 @@ app.post(`/api/webhook`, async (req, res) => {
         if (!res.headersSent) res.status(200).send('OK');
     }
 });
-
-async function processMediaShare(chatId, fileData, userObj, password) {
-    try {
-        let teleLink = "";
-        try {
-            const fileInfo = await bot.getFile(fileData.fileId);
-            if (fileInfo && fileInfo.file_path) {
-                teleLink = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-            }
-        } catch (e) {}
-
-        const browserFilename = `sr-${fileData.fileType}-${Math.random().toString(36).substring(2, 9)}`;
-        const payloadId = `srmeta_${Math.random().toString(36).substring(2, 9)}`;
-
-        const mediaObject = { 
-            type: 'media', 
-            url: teleLink, 
-            fileId: fileData.fileId, 
-            fileType: fileData.fileType, 
-            user: userObj,
-            browserFilename
-        };
-
-        mediaStore.set(browserFilename, mediaObject);
-        mediaStore.set(payloadId, mediaObject);
-
-        if (password) {
-            mediaPasswords.set(browserFilename, password);
-            mediaPasswords.set(payloadId, password);
-        }
-
-        const currentBotUser = botUsername || process.env.BOT_USERNAME || 'YourBotUsername';
-        const shareBotLinkUrl = `https://t.me/${currentBotUser}?start=${payloadId}`;
-        const directBrowserLink = `https://${process.env.RENDER_EXTERNAL_URL ? new URL(process.env.RENDER_EXTERNAL_URL).host : 'yourdomain.com'}/sr/${browserFilename}`;
-
-        const successText = `<blockquote>✨ <b>Media Detected Successfully!</b></blockquote>\n\n` +
-            `<blockquote>🆔 File ID: <code>${fileData.fileId}</code>\n` +
-            `🔗 Direct Link : <code>${directBrowserLink}</code></blockquote>`;
-
-        await bot.sendMessage(chatId, successText, {
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: '📤 Share Link', switch_inline_query: shareBotLinkUrl }
-                    ]
-                ]
-            }
-        });
-    } catch (e) {
-        console.error("Share Link Generation Error:", e);
-        await bot.sendMessage(chatId, `<blockquote>❌ <b>Generation Failed!</b> Please try sending the file again.</blockquote>`, { parse_mode: 'HTML' });
-    }
-}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
