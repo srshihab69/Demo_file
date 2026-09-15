@@ -37,40 +37,40 @@ const strings = {
         `<blockquote>Welcome to <b>TG Meta69 Bot!</b> Explore user & media information, manage media tools with strict password security, and download TikTok videos with ease. 🚀</blockquote>`,
     
     help: 
-        `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n\n` +
+        `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
         ` · /srmeta - Trigger media lookup via shared link\n` +
         ` · /tiktok - Download TikTok video\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
-        ` · /stat - Check bot statistics & status</blockquote>\n\n` +
+        ` · /stat - Check bot statistics & status</blockquote>\n` +
         `<blockquote expandable>📱 <b>Keyboard Buttons:</b>\n` +
         ` · 👤 User Info - Get any user's ID\n` +
         ` · 🆔 My Info - Get your own ID details\n` +
-        ` · ☎️ Support - Contact developer</blockquote>\n\n` +
+        ` · ☎️ Support - Contact developer</blockquote>\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID (No links/buttons generated for forwarded media)\n` +
         ` · 📷 Send Photo/Video → Get Browser Direct Link & Share Deep Link with 3-Attempt Password Security\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
         ` · 📄 Send Document → Get file_id\n` +
-        ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n\n` +
+        ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n` +
         `<blockquote expandable>🔍 <b>Auto-Detect:</b>\n` +
         ` · Just type @username in chat\n` +
         ` · Bot will automatically detect & look up the user info\n` +
         ` · Works for users, bots, channels & groups!\n` +
-        ` · Up to 3 usernames per message</blockquote>\n\n` +
+        ` · Up to 3 usernames per message</blockquote>\n` +
         `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
         ` · Reply /id to any message to get sender's ID\n` +
         ` · Use buttons for instant one-click ID lookup\n` +
         ` · Forward from channels to get channel ID\n` +
-        ` · Type @username anywhere — no command needed!</blockquote>\n\n` +
+        ` · Type @username anywhere — no command needed!</blockquote>\n` +
         `<blockquote>📞 Support: @srshihab69\n` +
         `🛠️ Made with ❤️ by @sr_shihab69</blockquote>`,
 
     stat: (mediaCount, lat) => 
-        `<blockquote>📊 <b>Bot Statistics & Status</b></blockquote>\n\n` +
+        `<blockquote>📊 <b>Bot Statistics & Status</b></blockquote>\n` +
         `<blockquote>⚡ Latency: <code>${lat}ms</code>\n` +
         `🤖 Status: <b>Online</b>\n` +
         `🕒 Uptime: <b>Always Active</b>\n` +
@@ -78,13 +78,13 @@ const strings = {
         `⚙️ Version: <code>${process.version}</code></blockquote>`,
 
     id_err: 
-        `<blockquote>ℹ️ <b>Use This Command</b></blockquote>\n\n` +
+        `<blockquote>ℹ️ <b>Use This Command</b></blockquote>\n` +
         `<blockquote>Please use the command like this:\n` +
         ` · /id @username\n` +
         ` · Or reply to a message with /id</blockquote>`,
 
     guide: 
-        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n\n` +
+        `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n` +
         `<blockquote>📱 Use keyboard buttons to get IDs\n` +
         `📎 Send any file to get its file_id\n` +
         `📩 Forward messages to get source ID\n` +
