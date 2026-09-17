@@ -239,9 +239,18 @@ app.post(`/api/webhook`, async (req, res) => {
         else if (text === '/user') {
             await bot.sendMessage(chatId, 
                 `<blockquote>👤 <b>User Info Guide</b></blockquote>\n` +
-                `<blockquote>To view any user's info, simply send or type their username (e.g. <code>@username</code>) in this chat, or reply with <code>/id @username</code>. 🚀</blockquote>`, {
+                `<blockquote>To view any user's info, click the button below to select a chat/user from your list, or type their username (e.g. <code>@username</code>). 🚀</blockquote>`, {
                 parse_mode: 'HTML',
-                reply_markup: { remove_keyboard: true }
+                reply_markup: { 
+                    inline_keyboard: [
+                        [
+                            { 
+                                text: '👥 Select User from Chat List', 
+                                switch_inline_query: '@' + (botUsername || 'YourBotUsername') 
+                            }
+                        ]
+                    ]
+                }
             });
         }
         else if (text === '/my') {
@@ -612,4 +621,3 @@ app.post(`/api/webhook`, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
-
