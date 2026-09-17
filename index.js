@@ -90,7 +90,7 @@ const userInfoKeyboard = {
         keyboard: [
             [
                 {
-                    text: '👤 User Info',
+                    text: '👤 Select User',
                     request_users: {
                         request_id: 101,
                         user_is_bot: false
