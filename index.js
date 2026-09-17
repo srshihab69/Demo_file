@@ -84,6 +84,25 @@ const strings = {
         `🔍 Type @username to auto-lookup any user</blockquote>`
 };
 
+// User selection keyboard
+const userInfoKeyboard = {
+    reply_markup: {
+        keyboard: [
+            [
+                {
+                    text: '👤 User Info',
+                    request_users: {
+                        request_id: 101,
+                        user_is_bot: false
+                    }
+                }
+            ]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    }
+};
+
 // Express route for browser media viewer
 app.get('/sr/:filename', async (req, res) => {
     const filename = req.params.filename;
@@ -216,6 +235,17 @@ app.post(`/api/webhook`, async (req, res) => {
         const entities = (msg.entities || []).concat(msg.caption_entities || []);
         const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://${req.get('host')}`;
 
+        const hideKeyboard = {
+            remove_keyboard: true
+        };
+
+        // Hide temporary user keyboard when any command other than /user is sent
+        if (text.startsWith('/') && text !== '/user') {
+            await bot.sendMessage(chatId, ' ', {
+                reply_markup: hideKeyboard
+            }).catch(() => {});
+        }
+
         // Handle /start with deep link payload (e.g., /start srmeta_xxxx)
         if (text.startsWith('/start')) {
             const parts = text.split(' ');
@@ -236,42 +266,37 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
         }
+
         else if (text === '/user') {
             await bot.sendMessage(chatId, 
                 `<blockquote>👤 <b>User Info Guide</b></blockquote>\n` +
-                `<blockquote>Click the button below to select a user from your chat list and view their info! 🚀</blockquote>`, {
+                `<blockquote>Please share a user using the button below to view their information. 🚀</blockquote>`, {
                 parse_mode: 'HTML',
-                reply_markup: { 
-                    inline_keyboard: [
-                        [
-                            { 
-                                text: '👥 Select User from List', 
-                                switch_inline_query: '' 
-                            }
-                        ]
-                    ]
-                }
+                reply_markup: userInfoKeyboard.reply_markup
             });
+            return;
         }
+
         else if (text === '/my') {
             const u = msg.from;
             await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n` +
                 `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { 
                 parse_mode: 'HTML',
-                reply_markup: { remove_keyboard: true } 
+                reply_markup: hideKeyboard
             });
         }
+
         else if (text === '/sup') {
             await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n` +
                 `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
                 ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { 
                 parse_mode: 'HTML', 
                 reply_markup: { 
-                    inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]],
-                    remove_keyboard: true 
+                    inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]]
                 } 
             });
         }
+
         else if (text.startsWith('/srmeta')) {
             const parts = text.split(' ');
             const payload = parts[1]; 
@@ -287,37 +312,41 @@ app.post(`/api/webhook`, async (req, res) => {
                 `├─ 🔗 Direct Media Links\n` +
                 `└─ 🔗 Shared Media Links\n\n` +
                 `⚠️ Please use a Direct or Share Link.</blockquote>`, 
-                { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }
+                { parse_mode: 'HTML', reply_markup: hideKeyboard }
             );
         }
+
         else if (text.startsWith('/tiktok')) {
             await bot.sendMessage(chatId, `<blockquote>🎵 Send me a TikTok video link 🔗</blockquote>`, { 
                 parse_mode: 'HTML',
-                reply_markup: { remove_keyboard: true }
+                reply_markup: hideKeyboard
             });
             return;
         }
+
         else if (text === '/help') {
             await bot.sendMessage(chatId, strings.help, { 
                 parse_mode: 'HTML',
-                reply_markup: { remove_keyboard: true }
+                reply_markup: hideKeyboard
             });
         }
+
         else if (text === '/stat') {
             const latency = Math.floor(Math.random() * 10) + 40;
             const effectiveCount = Math.ceil(mediaStore.size / 2);
             await bot.sendMessage(chatId, strings.stat(effectiveCount, latency), { 
                 parse_mode: 'HTML',
-                reply_markup: { remove_keyboard: true }
+                reply_markup: hideKeyboard
             });
         }
+
         else if (text.startsWith('/id')) {
             const args = text.split(' ');
             if (msg.reply_to_message) {
                 const ruid = msg.reply_to_message.from.id;
                 await bot.sendMessage(chatId, `<blockquote>🆔 <b>Sender ID</b></blockquote>\n` + `<blockquote>🆔 User ID: <code>${ruid}</code></blockquote>`, { 
                     parse_mode: 'HTML',
-                    reply_markup: { remove_keyboard: true }
+                    reply_markup: hideKeyboard
                 });
             } else if (args.length > 1) {
                 const target = args[1].startsWith('@') ? args[1] : '@' + args[1];
@@ -325,21 +354,50 @@ app.post(`/api/webhook`, async (req, res) => {
                     const chat = await bot.getChat(target);
                     await bot.sendMessage(chatId, `<blockquote>🔍 <b>Lookup Result</b></blockquote>\n` + `<blockquote>🆔 ID: <code>${chat.id}</code>\n👤 Name: <code>${chat.first_name || chat.title}</code></blockquote>`, { 
                         parse_mode: 'HTML',
-                        reply_markup: { remove_keyboard: true }
+                        reply_markup: hideKeyboard
                     });
                 } catch (e) {
                     await bot.sendMessage(chatId, `<blockquote>❌ <b>Error</b></blockquote>\n` + `<blockquote>Username not found.</blockquote>`, { 
                         parse_mode: 'HTML',
-                        reply_markup: { remove_keyboard: true }
+                        reply_markup: hideKeyboard
                     });
                 }
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { 
                     parse_mode: 'HTML',
-                    reply_markup: { remove_keyboard: true }
+                    reply_markup: hideKeyboard
                 });
             }
         }
+
+        else if (msg.user_shared) {
+            const userId = msg.user_shared.user_id;
+
+            try {
+                const user = await bot.getChat(userId);
+
+                const info = `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n` +
+                    `<blockquote>🆔 ID: <code>${user.id}</code>\n` +
+                    `👤 Name: <code>${user.first_name} ${user.last_name || ''}</code>\n` +
+                    `🏷️ User: @${user.username || 'None'}\n` +
+                    `⭐ Prem: ${user.is_premium ? '✅' : '❌'}</blockquote>`;
+
+                await bot.sendMessage(chatId, info, {
+                    parse_mode: 'HTML',
+                    reply_markup: hideKeyboard
+                });
+
+            } catch (e) {
+                await bot.sendMessage(chatId, `<blockquote>🔍 <b>Shared User Info</b></blockquote>\n` +
+                    `<blockquote>🆔 ID: <code>${userId}</code>\n⚠️ Details restricted.</blockquote>`, {
+                    parse_mode: 'HTML',
+                    reply_markup: hideKeyboard
+                });
+            }
+
+            return;
+        }
+
         else if (text.includes(`${hostUrl}/sr/`)) {
             const trimmedLink = text.trim();
             const filename = trimmedLink.split('/sr/')[1]?.split(' ')[0];
@@ -352,6 +410,7 @@ app.post(`/api/webhook`, async (req, res) => {
 
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n` + `<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
+
         // ================= HIGH FILTERED TIKTOK HANDLER (30MB LIMIT + SHORT TEXT) =================
         else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
             let videoDownloadUrl = "";
@@ -397,7 +456,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         await bot.sendVideo(chatId, videoBuffer, {
                             caption: `<blockquote>📥 <b>Downloaded via TG Meta69 Bot</b>\n📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n👨‍💻 Developer: @srshihab69</blockquote>`,
                             parse_mode: 'HTML',
-                            reply_markup: { remove_keyboard: true }
+                            reply_markup: hideKeyboard
                         }, {
                             filename: 'tiktok_video.mp4',
                             contentType: 'video/mp4'
@@ -413,8 +472,7 @@ app.post(`/api/webhook`, async (req, res) => {
                                 reply_markup: {
                                     inline_keyboard: [
                                         [{ text: `📥 Download HD Video (${sizeInMB.toFixed(1)} MB)`, url: videoDownloadUrl }]
-                                    ],
-                                    remove_keyboard: true
+                                    ]
                                 }
                             }
                         );
@@ -423,7 +481,7 @@ app.post(`/api/webhook`, async (req, res) => {
                 } else {
                     await bot.sendMessage(chatId, `<blockquote>⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅</blockquote>`, { 
                         parse_mode: 'HTML',
-                        reply_markup: { remove_keyboard: true }
+                        reply_markup: hideKeyboard
                     });
                     return;
                 }
@@ -434,12 +492,14 @@ app.post(`/api/webhook`, async (req, res) => {
                 }
                 await bot.sendMessage(chatId, `<blockquote>⚠️ <b>This link is not supported.</b>\n\n🔗 <b>Please send a valid link and try again.</b> ✅</blockquote>`, { 
                     parse_mode: 'HTML',
-                    reply_markup: { remove_keyboard: true }
+                    reply_markup: hideKeyboard
                 });
                 return;
             }
         }
+
         // ==============================================================================
+
         else {
             const matchParam = text.match(/[?&]start=(srmeta_[a-zA-Z0-9]+)/);
             if (matchParam) {
@@ -593,6 +653,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         } catch (e) {}
                     }
                 }
+
                 if (lookupResults) {
                     finalMessage += `<blockquote>🔍 <b>Auto Lookup</b></blockquote>\n<blockquote expandable>${lookupResults.trim()}</blockquote>`;
                 }
@@ -600,14 +661,15 @@ app.post(`/api/webhook`, async (req, res) => {
 
             if (finalMessage) {
                 let wrappedMessage = finalMessage.split('\n\n').map(part => part.startsWith('<blockquote>') ? part : `<blockquote>${part}</blockquote>`).join('\n');
+
                 await bot.sendMessage(chatId, wrappedMessage, { 
                     parse_mode: 'HTML', 
-                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons, remove_keyboard: true } : { remove_keyboard: true } 
+                    reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : hideKeyboard
                 });
             } else if (text && !text.startsWith('/') && !text.startsWith('@')) {
                 await bot.sendMessage(chatId, strings.guide, { 
                     parse_mode: 'HTML',
-                    reply_markup: { remove_keyboard: true }
+                    reply_markup: hideKeyboard
                 });
             }
         }
