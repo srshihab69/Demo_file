@@ -37,16 +37,12 @@ const strings = {
         ` · /start - Start the bot\n` +
         ` · /user - Select a user to view info\n` +
         ` · /my - View your own info details\n` +
-        ` · /sup - Remove keyboard buttons\n` +
+        ` · /sup - Contact support & developer\n` +
         ` · /srmeta - Trigger media lookup via shared link\n` +
         ` · /tiktok - Download TikTok video\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
         ` · /stat - Check bot statistics & status</blockquote>\n` +
-        `<blockquote expandable>📱 <b>Keyboard Buttons:</b>\n` +
-        ` · 👤 Select User - Get any user's ID via chat list\n` +
-        ` · 🆔 My Info - Get your own ID details\n` +
-        ` · ☎️ Support - Contact developer</blockquote>\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get Browser Direct Link & Share Deep Link\n` +
@@ -61,7 +57,6 @@ const strings = {
         ` · Up to 3 usernames per message</blockquote>\n` +
         `<blockquote expandable>💡 <b>Pro Tips:</b>\n` +
         ` · Reply /id to any message to get sender's ID\n` +
-        ` · Use buttons for instant one-click ID lookup\n` +
         ` · Forward from channels to get channel ID\n` +
         ` · Type @username anywhere — no command needed!</blockquote>\n` +
         `<blockquote>📞 Support: @SRModxPremium\n` +
@@ -83,22 +78,10 @@ const strings = {
 
     guide: 
         `<blockquote>ℹ️ <b>How to use this bot:</b></blockquote>\n` +
-        `<blockquote>📱 Use keyboard buttons to get IDs\n` +
-        `📎 Send any file to get its file_id\n` +
+        `<blockquote>📎 Send any file to get its file_id\n` +
         `📩 Forward messages to get source ID\n` +
         `🔗 Send t.me or social media links\n` +
         `🔍 Type @username to auto-lookup any user</blockquote>`
-};
-
-const mainKeyboard = {
-    reply_markup: {
-        keyboard: [
-            [{ text: '👤 Select User', request_users: { request_id: 101, user_is_bot: false } }],
-            [{ text: '🆔 My Info' }, { text: '☎️ Support' }]
-        ],
-        resize_keyboard: true
-    },
-    parse_mode: 'HTML'
 };
 
 // Express route for browser media viewer
@@ -246,7 +229,10 @@ app.post(`/api/webhook`, async (req, res) => {
                     return;
                 }
             } else {
-                await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), mainKeyboard);
+                await bot.sendMessage(chatId, strings.welcome(msg.from.first_name), {
+                    parse_mode: 'HTML',
+                    reply_markup: { remove_keyboard: true }
+                });
                 return;
             }
         }
@@ -266,11 +252,14 @@ app.post(`/api/webhook`, async (req, res) => {
                 `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '/sup') {
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Keyboard buttons have been removed.</b></blockquote>`, {
-                parse_mode: 'HTML',
-                reply_markup: {
-                    remove_keyboard: true
-                }
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n` +
+                `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
+                ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { 
+                parse_mode: 'HTML', 
+                reply_markup: { 
+                    inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]],
+                    remove_keyboard: true 
+                } 
             });
         }
         else if (text.startsWith('/srmeta')) {
@@ -319,21 +308,6 @@ app.post(`/api/webhook`, async (req, res) => {
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
             }
-        }
-        else if (text === '👤 Select User' || text === '👤 User Info') {
-            const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Selected User Information</b></blockquote>\n` +
-                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
-        }
-        else if (text === '🆔 My Info') {
-            const u = msg.from;
-            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n` +
-                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
-        }
-        else if (text === '☎️ Support') {
-            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Need help or found a bug?</b></blockquote>\n` +
-                `<blockquote> · If you encounter any issues, have questions, or want to suggest a new feature, feel free to reach out!\n` +
-                ` · Contact my developer: <b>@srshihab69</b></blockquote>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '👨‍💻 Developer', url: 'https://t.me/srshihab69' }]] } });
         }
         else if (msg.user_shared) {
             const userId = msg.user_shared.user_id;
@@ -575,8 +549,8 @@ app.post(`/api/webhook`, async (req, res) => {
                         const url = text.substring(lookups[i].offset, lookups[i].offset + lookups[i].length);
                         if (url.includes('t.me/')) {
                             target = '@' + url.split('t.me/')[1].split('/')[0].split('?')[0].toLowerCase();
-                        }
                     }
+                }
 
                     if (target.startsWith('@') && !processedTargets.has(target)) {
                         processedTargets.add(target);
@@ -601,7 +575,6 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             if (finalMessage) {
-                // Ensure all text has blockquotes as requested
                 let wrappedMessage = finalMessage.split('\n\n').map(part => part.startsWith('<blockquote>') ? part : `<blockquote>${part}</blockquote>`).join('\n');
                 await bot.sendMessage(chatId, wrappedMessage, { 
                     parse_mode: 'HTML', 
@@ -621,4 +594,3 @@ app.post(`/api/webhook`, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
-
