@@ -35,21 +35,22 @@ const strings = {
         `<blockquote>👑 <b>TG Meta69 Bot - Help Menu</b></blockquote>\n` +
         `<blockquote expandable>📋 <b>User Commands:</b>\n` +
         ` · /start - Start the bot\n` +
+        ` · /user - Select a user to view info\n` +
+        ` · /my - View your own info details\n` +
+        ` · /sup - Remove keyboard buttons\n` +
         ` · /srmeta - Trigger media lookup via shared link\n` +
         ` · /tiktok - Download TikTok video\n` +
-        ` · /adult - Download adult video link\n` +
         ` · /help - Show this help menu\n` +
         ` · /id @username - Get ID by username\n` +
         ` · /stat - Check bot statistics & status</blockquote>\n` +
         `<blockquote expandable>📱 <b>Keyboard Buttons:</b>\n` +
-        ` · 👤 User Info - Get any user's ID\n` +
+        ` · 👤 Select User - Get any user's ID via chat list\n` +
         ` · 🆔 My Info - Get your own ID details\n` +
         ` · ☎️ Support - Contact developer</blockquote>\n` +
         `<blockquote expandable>✨ <b>Special Features:</b>\n` +
         ` · 📩 Forward Msg → Get source & media ID\n` +
         ` · 📷 Send Photo/Video → Get Browser Direct Link & Share Deep Link\n` +
         ` · 🎥 TikTok Video → Send link for direct chat video download (Under 30MB)\n` +
-        ` · 🔞 Adult Video → Send link for working download with 30MB inline split\n` +
         ` · 🎭 Send Sticker/Emoji → Get ID (Unique)\n` +
         ` · 📄 Send Document → Get file_id\n` +
         ` · 🎵 Send Audio/Voice → Get file_id</blockquote>\n` +
@@ -92,7 +93,7 @@ const strings = {
 const mainKeyboard = {
     reply_markup: {
         keyboard: [
-            [{ text: '👤 User Info', request_users: { request_id: 101, user_is_bot: false } }],
+            [{ text: '👤 Select User', request_users: { request_id: 101, user_is_bot: false } }],
             [{ text: '🆔 My Info' }, { text: '☎️ Support' }]
         ],
         resize_keyboard: true
@@ -249,6 +250,29 @@ app.post(`/api/webhook`, async (req, res) => {
                 return;
             }
         }
+        else if (text === '/user') {
+            await bot.sendMessage(chatId, `<blockquote>👤 <b>Click the button below to select a user from your chat list:</b></blockquote>`, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: 'Select User', request_users: { request_id: 101, user_is_bot: false } }]
+                    ]
+                }
+            });
+        }
+        else if (text === '/my') {
+            const u = msg.from;
+            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Your Information</b></blockquote>\n` +
+                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
+        }
+        else if (text === '/sup') {
+            await bot.sendMessage(chatId, `<blockquote>🛡️ <b>Keyboard buttons have been removed.</b></blockquote>`, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    remove_keyboard: true
+                }
+            });
+        }
         else if (text.startsWith('/srmeta')) {
             const parts = text.split(' ');
             const payload = parts[1]; 
@@ -269,10 +293,6 @@ app.post(`/api/webhook`, async (req, res) => {
         }
         else if (text.startsWith('/tiktok')) {
             await bot.sendMessage(chatId, `<blockquote>🎵 Send me a TikTok video link 🔗</blockquote>`, { parse_mode: 'HTML' });
-            return;
-        }
-        else if (text.startsWith('/adult')) {
-            await bot.sendMessage(chatId, `<blockquote>🔞 <b>Send me any adult/video link 🔗</b>\n\nI will process and fetch the video for you! ✅</blockquote>`, { parse_mode: 'HTML' });
             return;
         }
         else if (text === '/help') {
@@ -299,6 +319,11 @@ app.post(`/api/webhook`, async (req, res) => {
             } else {
                 await bot.sendMessage(chatId, strings.id_err, { parse_mode: 'HTML' });
             }
+        }
+        else if (text === '👤 Select User' || text === '👤 User Info') {
+            const u = msg.from;
+            await bot.sendMessage(chatId, `<blockquote>🆔 <b>Selected User Information</b></blockquote>\n` +
+                `<blockquote>🆔 ID: <code>${u.id}</code>\n👤 Name: <code>${u.first_name}</code>\n🏷️ User: @${u.username || 'N/A'}\n⭐ Prem: ${u.is_premium ? '✅' : '❌'} </blockquote>`, { parse_mode: 'HTML' });
         }
         else if (text === '🆔 My Info') {
             const u = msg.from;
@@ -333,39 +358,13 @@ app.post(`/api/webhook`, async (req, res) => {
 
             await bot.sendMessage(chatId, `<blockquote>❌ <b>Link Expired or Not Found</b></blockquote>\n` + `<blockquote>This browser link has expired or is invalid.</blockquote>`, { parse_mode: 'HTML' });
         }
-        // ================= ADULT & OTHER VIDEO LINK HANDLER (INLINE BUTTON DOWNLOAD) =================
-        else if (text.toLowerCase().includes('http://') || text.toLowerCase().includes('https://')) {
-            try {
-                const urlRegex = /https?:\/\/[^\s]+/g;
-                const foundUrls = text.match(urlRegex) || [];
-                let targetUrl = foundUrls[0] || text.trim();
-
-                await bot.sendMessage(chatId, 
-                    `<blockquote>🔞 <b>Adult Video Link Detected!</b></blockquote>\n` +
-                    `<blockquote>🔗 Click the button below to open the link and download the video directly from your browser. ✅</blockquote>`, 
-                    { 
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: `📥 Download/View Video`, url: targetUrl }]
-                            ]
-                        }
-                    }
-                );
-                return;
-
-            } catch (err) {
-                console.error("Link Handler Error:", err);
-                await bot.sendMessage(chatId, `<blockquote>⚠️ <b>Error processing this link. Please try again.</b></blockquote>`, { parse_mode: 'HTML' });
-                return;
-            }
-        }
         // ================= HIGH FILTERED TIKTOK HANDLER (30MB LIMIT + SHORT TEXT) =================
         else if (text.toLowerCase().includes('tiktok.com') || text.toLowerCase().includes('vm.tiktok.com')) {
             let videoDownloadUrl = "";
             let processingMsg = null;
 
             try {
+                // Short single-line processing text
                 processingMsg = await bot.sendMessage(chatId, `⏳ <b>Downloading video...</b>`, { parse_mode: 'HTML' });
 
                 const urlRegex = /https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/g;
@@ -399,9 +398,12 @@ app.post(`/api/webhook`, async (req, res) => {
                     const videoBuffer = Buffer.from(arrayBuffer);
                     const sizeInMB = videoBuffer.length / (1024 * 1024);
 
+                    console.log(`TikTok Video Size: ${sizeInMB.toFixed(2)} MB`);
+
+                    // If size is 30MB or less, send video directly to chat
                     if (sizeInMB <= 30) {
                         await bot.sendVideo(chatId, videoBuffer, {
-                            caption: `📥 <b>Downloaded via TG Meta69 Bot</b>\n📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n👨‍💻 Developer: @srshihab69`,
+                            caption: `<blockquote>📥 <b>Downloaded via TG Meta69 Bot</b>\n📊 Size: <code>${sizeInMB.toFixed(2)} MB</code>\n👨‍💻 Developer: @srshihab69</blockquote>`,
                             parse_mode: 'HTML'
                         }, {
                             filename: 'tiktok_video.mp4',
@@ -409,6 +411,7 @@ app.post(`/api/webhook`, async (req, res) => {
                         });
                         return;
                     } else {
+                        // If size is greater than 30MB, send inline button
                         await bot.sendMessage(chatId, 
                             `<blockquote>⚠️ <b>Video is larger than 30MB!</b></blockquote>\n` +
                             `<blockquote>📊 File Size: <code>${sizeInMB.toFixed(2)} MB</code>\n` +
@@ -550,7 +553,9 @@ app.post(`/api/webhook`, async (req, res) => {
             if (customEmojis.length > 0) {
                 finalMessage += `<blockquote>💎 <b>Premium Emoji Detected</b></blockquote>\n<blockquote expandable>`;
                 
+                // Show unique emojis only once
                 const uniqueEmojiIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
+                
                 uniqueEmojiIds.forEach((emojiId, index) => {
                     finalMessage += `🆔 Emoji ${index + 1} ID: <code>${emojiId}</code>\n`;
                 });
@@ -596,7 +601,9 @@ app.post(`/api/webhook`, async (req, res) => {
             }
 
             if (finalMessage) {
-                await bot.sendMessage(chatId, finalMessage, { 
+                // Ensure all text has blockquotes as requested
+                let wrappedMessage = finalMessage.split('\n\n').map(part => part.startsWith('<blockquote>') ? part : `<blockquote>${part}</blockquote>`).join('\n');
+                await bot.sendMessage(chatId, wrappedMessage, { 
                     parse_mode: 'HTML', 
                     reply_markup: inlineButtons.length > 0 ? { inline_keyboard: inlineButtons } : null 
                 });
@@ -614,3 +621,4 @@ app.post(`/api/webhook`, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`TG Meta69Bot Active on Port ${PORT}`));
+
