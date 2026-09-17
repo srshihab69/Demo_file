@@ -530,7 +530,7 @@ app.post(`/api/webhook`, async (req, res) => {
             let browserDirectLink = "";
             let shareDeepLink = "";
 
-            if (msg.photo || msg.video || msg.animation || msg.document || msg.audio || msg.voice) {
+            if (msg.photo || msg.video || msg.animation || msg.sticker || msg.document || msg.audio || msg.voice) {
                 let fileObj = null;
                 let fileTypeName = "file";
                 if (msg.photo) {
@@ -552,7 +552,7 @@ app.post(`/api/webhook`, async (req, res) => {
                     fileObj = msg.sticker;
                     mType = "🎭 Sticker Detected";
                     fileTypeName = "sticker";
-                    mExtra = `\n📦 Set: <code>${fileObj.set_name || 'None'}</code>\n😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>`;
+                    mExtra = `\n📦 Set: <code>${fileObj.set_name || 'None'}</code>\n😀 Emoji: <code>${fileObj.emoji || 'N/A'}</code>\n📊 Size: <code>${formatSize(fileObj.file_size)}</code>`;
                 } else if (msg.document) {
                     fileObj = msg.document;
                     mType = "📄 File Detected";
