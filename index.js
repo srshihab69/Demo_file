@@ -239,14 +239,14 @@ app.post(`/api/webhook`, async (req, res) => {
         else if (text === '/user') {
             await bot.sendMessage(chatId, 
                 `<blockquote>👤 <b>User Info Guide</b></blockquote>\n` +
-                `<blockquote>To view any user's info, click the button below to select a chat/user from your list, or type their username (e.g. <code>@username</code>). 🚀</blockquote>`, {
+                `<blockquote>Click the button below to select a user from your chat list and view their info! 🚀</blockquote>`, {
                 parse_mode: 'HTML',
                 reply_markup: { 
                     inline_keyboard: [
                         [
                             { 
-                                text: '👥 Select User from Chat List', 
-                                switch_inline_query: '@' + (botUsername || 'YourBotUsername') 
+                                text: '👥 Select User from List', 
+                                switch_inline_query: '' 
                             }
                         ]
                     ]
