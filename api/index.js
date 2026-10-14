@@ -31,7 +31,7 @@ export default async function handler(req, res) {
               [
                 { 
                   text: '💫 TG BotCast Engine', 
-                  url: 'https://t.me/NexaEarnApexBot/EarningPlatform',
+                  url: 'https://tgbotcastengine.netlify.app',
                   style: 'primary' 
                 }
               ],
