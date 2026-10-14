@@ -31,7 +31,7 @@ export default async function handler(req, res) {
               [
                 { 
                   text: '💫 TG BotCast Engine', 
-                  url: 'https://tgbotcastengine.netlify.app',
+                  url: 'https://t.me/ChannelChontrollerBot/MyApp',
                   style: 'primary' 
                 }
               ],
